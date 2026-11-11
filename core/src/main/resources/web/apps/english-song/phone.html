@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guess the Bollywood</title>
+<style>
+:root { --bg: #0c201b; --surface: #143630; --line: #2f5c52; --ink: #f3eee2; --muted: #a9bfb7; --gold: #d9b26a; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: #0c201b; background: var(--bg); color: #f3eee2; color: var(--ink); font: 18px/1.3 Roboto, "Noto Sans", "Segoe UI", Arial, sans-serif; }
+#page { max-width: 480px; margin: 0 auto; padding: 16px; }
+.top { display: flex; align-items: center; margin-bottom: 16px; }
+h1 { margin: 0; font: 700 24px/1.2 Georgia, "Noto Serif", serif; flex: 1 1 auto; }
+button { font: inherit; border-radius: 12px; border: 2px solid #2f5c52; background: #143630; color: #f3eee2; min-height: 56px; padding: 8px 14px; width: 100%; margin-top: 8px; }
+button.small { width: auto; min-height: 44px; margin: 0 0 0 8px; font-size: 16px; }
+button.primary { min-height: 84px; background: #d9b26a; border-color: #d9b26a; color: #0c201b; font-size: 26px; font-weight: 700; }
+button.buzz { min-height: 46vh; border-radius: 24px; background: #d9b26a; border-color: #f3eee2; color: #0c201b; font-size: 54px; font-weight: 700; }
+button.good { background: #d9b26a; border-color: #d9b26a; color: #0c201b; font-weight: 700; }
+button[disabled] { opacity: .45; }
+.row { display: flex; gap: 8px; } .row button { flex: 1 1 0; }
+.scores { display: flex; flex-wrap: wrap; gap: 16px; margin: 0 0 16px; color: #a9bfb7; }
+.scores b { color: #f3eee2; }
+.answer { padding: 14px 0 6px; font: 700 32px/1.15 Georgia, "Noto Serif", serif; color: #d9b26a; }
+.note { color: #a9bfb7; font-size: 16px; margin: 4px 0 8px; }
+.big { font-size: 22px; margin: 8px 0; }
+.clock { font-size: 40px; font-weight: 700; }
+input { font: inherit; width: 100%; min-height: 48px; padding: 8px 10px; border-radius: 10px; border: 2px solid #2f5c52; background: #0c201b; color: #f3eee2; }
+#settings { margin-top: 24px; padding-top: 12px; border-top: 2px solid #2f5c52; }
+#err { color: #e8806a; font-size: 16px; margin: 8px 0; }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div id="page">
+  <div class="top"><h1 id="title"></h1><button class="small" id="settingsBtn" type="button">Settings</button><button class="small" id="homeBtn" type="button">Home</button></div>
+  <div class="scores" id="scores"></div>
+  <div id="err" class="hidden"></div>
+  <div id="view"></div>
+  <div id="settings" class="hidden"></div>
+</div>
+<script src="/shared/hub-client.js"></script>
+<script>
+(function () {
+  var APP = location.pathname.split('/').pop();
+  var API = '/api/app/' + APP + '/';
+  var TITLES = { 'english-song': 'Lost in Translation', 'emoji-movie': 'Emoji Movie' };
+  var KEY = APP + '-';
+  function $(id) { return document.getElementById(id); }
+  function load(k) { try { return window.sessionStorage.getItem(KEY + k); } catch (e) { return null; } }
+  function save(k, v) { try { if (v === null) { window.sessionStorage.removeItem(KEY + k); } else { window.sessionStorage.setItem(KEY + k, v); } } catch (e) { /* Lasts as long as the page. */ } }
+  $('title').textContent = TITLES[APP] || 'Guess';
+  document.title = $('title').textContent;
+
+  var role = load('role'), teamId = load('team'), token = load('token');
+  var state = null, host = null, busyUntil = 0, settingsOpen = false, renderKey = null, fails = 0;
+
+  function req(path, body, done) {
+    var x = new XMLHttpRequest(), ended = false;
+    function end(ok, d) { if (!ended) { ended = true; if (done) { done(ok, d); } } }
+    try {
+      x.open(body ? 'POST' : 'GET', API + path, true); x.timeout = 5000;
+      x.onreadystatechange = function () { if (x.readyState !== 4) { return; } var d = null; try { d = JSON.parse(x.responseText); } catch (e) { d = null; } end(x.status === 200, d); };
+      x.ontimeout = function () { end(false, null); }; x.onerror = function () { end(false, null); };
+      x.send(body ? JSON.stringify(body) : null);
+    } catch (e) { end(false, null); }
+  }
+  function showErr(t) { $('err').textContent = t || ''; $('err').className = t ? '' : 'hidden'; }
+  function act(a, extra, then) {
+    if (new Date().getTime() < busyUntil) { return; } // A double tap counts once.
+    busyUntil = new Date().getTime() + 500;
+    var b = { action: a }, k;
+    if (state && state.questionId) { b.questionId = String(state.questionId); }
+    if (token) { b.token = token; }
+    if (extra) { for (k in extra) { if (extra.hasOwnProperty(k)) { b[k] = extra[k]; } } }
+    req('action', b, function (ok, d) { if (then) { then(ok, d); } tick(true); });
+  }
+  function btn(parent, text, cls, fn) {
+    var b = document.createElement('button'); b.type = 'button'; b.textContent = text; if (cls) { b.className = cls; } b.onclick = fn; parent.appendChild(b); return b;
+  }
+  function el(parent, cls, text, tag) { var d = document.createElement(tag || 'div'); if (cls) { d.className = cls; } if (text !== undefined) { d.textContent = text; } parent.appendChild(d); return d; }
+  function setRole(r) { role = r; save('role', r); renderKey = null; draw(); }
+  function becomeHost() {
+    var a = state && state.hasHost ? 'take_over_host' : 'become_host';
+    if (a === 'take_over_host' && !window.confirm('Someone is already host. Take over from them?')) { return; }
+    act(a, null, function (ok, d) {
+      if (ok && d && d.hostToken) { token = d.hostToken; save('token', token); setRole('host'); } else { showErr('Could not become host. Try again.'); }
+    });
+  }
+
+  function drawRoles(v) {
+    el(v, 'big', 'How are you playing?');
+    btn(v, 'I am playing', 'primary', function () { setRole('team'); });
+    btn(v, 'I will host (see the answers)', '', becomeHost);
+    btn(v, 'Just watching', '', function () { setRole('watch'); });
+    el(v, 'note', 'The host reads answers on their phone and decides who is right. No host? Shout your answers and use the TV remote.');
+  }
+  function drawTeam(v, s) {
+    var teams = s.teams || [], i, mine = null;
+    for (i = 0; i < teams.length; i++) { if (teams[i].id === teamId) { mine = teams[i]; } }
+    if (!mine) {
+      el(v, 'big', 'Which team are you on?');
+      for (i = 0; i < teams.length; i++) { (function (t) { btn(v, t.name, 'primary', function () { teamId = t.id; save('team', t.id); renderKey = null; draw(); }); })(teams[i]); }
+      return;
+    }
+    el(v, 'note', mine.name);
+    var live = s.phase === 'question';
+    if (live) {
+      btn(v, 'BUZZ', 'buzz', function () { act('buzz', { teamId: teamId }); });
+    } else if (s.phase === 'buzzed') {
+      el(v, 'big', s.buzzTeamName + ' buzzed. Shout your answer!');
+    } else if (s.phase === 'reveal') {
+      el(v, 'answer', (s.reveal && s.reveal.answer) || '');
+      el(v, 'note', 'Next question coming up.');
+    } else if (s.phase === 'final') {
+      el(v, 'big', s.winners && s.winners.length ? s.winners.join(' and ') + ' won!' : 'Game over');
+    } else {
+      el(v, 'big', 'Get ready. Watch the TV.');
+    }
+    btn(v, 'Change team', '', function () { teamId = null; save('team', null); renderKey = null; draw(); });
+  }
+  function drawHost(v, s) {
+    var p = s.phase, teams = s.teams || [], i;
+    if (p === 'ready') {
+      el(v, 'note', 'Do not show this screen to anyone: it will show the answers.');
+      btn(v, 'Start', 'primary', function () { act('start_question'); });
+    } else if (p === 'question' || p === 'buzzed') {
+      el(v, 'answer', host && host.answer ? host.answer : '...');
+      if (host && host.alternates && host.alternates.length) { el(v, 'note', 'Also accept: ' + host.alternates.join(', ')); }
+      if (p === 'buzzed') {
+        el(v, 'big', s.buzzTeamName + ' buzzed. Worth ' + s.worth + '.');
+        var r = el(v, 'row');
+        btn(r, 'Correct', 'good', function () { act('judge', { correct: 'true', buzzSeq: String(s.buzzSeq) }); });
+        btn(r, 'Wrong', '', function () { act('judge', { correct: 'false', buzzSeq: String(s.buzzSeq) }); });
+      } else {
+        el(v, 'big', 'Worth ' + s.worth + '. Clue ' + s.clue + ' of ' + s.cluesTotal + '.');
+        var q = el(v, 'row');
+        btn(q, 'Next clue', '', function () { act('next_clue', { clue: String(s.clue) }); }).disabled = s.clue >= s.cluesTotal;
+        btn(q, 'Reveal', '', function () { act('reveal'); });
+        el(v, 'note', 'Someone shouted it right? Tap their team:');
+        for (i = 0; i < teams.length; i++) { (function (t) { btn(v, t.name + ' got it', '', function () { act('reveal', null, function () { busyUntil = 0; act('award', { teamId: t.id }); }); }); })(teams[i]); }
+      }
+    } else if (p === 'reveal') {
+      var a = s.reveal || {};
+      el(v, 'answer', a.answer || '');
+      if (s.canAward) {
+        el(v, 'note', 'Give ' + s.awardPoints + ' points to:');
+        for (i = 0; i < teams.length; i++) { (function (t) { btn(v, t.name, t.id === s.suggestedTeamId ? 'good' : '', function () { act('award', { teamId: t.id }); }); })(teams[i]); }
+      }
+      if (s.canPlaySong) {
+        if (s.song && s.song.status === 'playing') { btn(v, 'Stop the song', '', function () { act('stop_song'); }); } else { btn(v, 'Play the song', '', function () { act('play_song'); }); }
+      }
+      btn(v, 'Next question', 'primary', function () { act('next_question'); });
+    } else if (p === 'final') {
+      el(v, 'answer', s.winners && s.winners.length ? s.winners.join(' and ') + ' won!' : 'Game over');
+      btn(v, 'Play again', 'primary', function () { act('reset_game'); });
+    }
+  }
+  function drawWatch(v) { el(v, 'big', 'Enjoy the show on the TV.'); }
+
+  function drawSettings() {
+    var box = $('settings'); while (box.firstChild) { box.removeChild(box.firstChild); }
+    var s = state; if (!s) { return; }
+    var between = s.phase === 'ready' || s.phase === 'reveal' || s.phase === 'final', teams = s.teams || [];
+    el(box, 'big', 'Teams');
+    for (var i = 0; i < teams.length; i++) {
+      (function (t) {
+        var i2 = document.createElement('input'); i2.value = t.name; i2.maxLength = 20; box.appendChild(i2);
+        i2.onchange = function () { busyUntil = 0; act('set_team_name', { id: t.id, name: i2.value }, function (ok) { if (!ok) { showErr('That name is not available.'); } }); };
+        if (between && teams.length > 2) { btn(box, 'Remove ' + t.name, '', function () { busyUntil = 0; act('remove_team', { id: t.id }, drawSettings); }); }
+      })(teams[i]);
+    }
+    if (between && teams.length < 3) { btn(box, 'Add a third team', '', function () { busyUntil = 0; act('add_team', null, function () { setTimeout(drawSettings, 200); }); }); }
+    btn(box, s.difficulty === 'easy' ? 'Questions: easy only (tap for mixed)' : 'Questions: mixed (tap for easy only)', '', function () { busyUntil = 0; act('set_difficulty', { difficulty: s.difficulty === 'easy' ? 'mixed' : 'easy' }, function () { setTimeout(drawSettings, 200); }); });
+    btn(box, 'Change my role', '', function () { settingsOpen = false; box.className = 'hidden'; if (role === 'host') { token = null; save('token', null); } setRole(null); save('role', null); });
+    btn(box, 'End the game', '', function () { if (window.confirm('End the game and show the winner?')) { busyUntil = 0; act('end_game'); } });
+    btn(box, 'Reset scores', '', function () { if (window.confirm('Reset all scores and start again?')) { busyUntil = 0; act('reset_game'); } });
+    el(box, 'note', 'How to play: clues get easier over time, and fewer clues score more. Buzz when you know it. A wrong answer locks your team out and others can steal.');
+  }
+
+  function draw() {
+    var s = state; if (!s) { return; }
+    var sc = $('scores'), html = (s.teams || []).map(function (t) { return t.name + ' ' + t.score; }).join('|');
+    if (sc.__h !== html) { sc.__h = html; while (sc.firstChild) { sc.removeChild(sc.firstChild); } (s.teams || []).forEach(function (t) { var d = el(sc); d.appendChild(document.createTextNode(t.name + ' ')); el(d, '', String(t.score), 'b'); }); }
+    var k = [role, teamId, s.phase, s.questionId, s.clue, s.buzzSeq, s.worth, s.canAward, s.hasHost, s.song && s.song.status, host && host.answer, JSON.stringify(s.teams), s.steal].join('~');
+    if (k === renderKey) { return; }
+    renderKey = k;
+    var v = $('view'); while (v.firstChild) { v.removeChild(v.firstChild); }
+    if (!role) { drawRoles(v); } else if (role === 'host') { drawHost(v, s); } else if (role === 'team') { drawTeam(v, s); } else { drawWatch(v); }
+  }
+
+  function tick(once) {
+    req('state', null, function (ok, d) {
+      try {
+        if (ok && d) {
+          fails = 0; showErr(''); state = d;
+          if (role === 'host' && token && (d.phase === 'question' || d.phase === 'buzzed')) {
+            req('host-view', { token: token }, function (ok2, h) {
+              if (ok2 && h) { host = h; } else if (h && h.error) { token = null; save('token', null); role = null; save('role', null); showErr('Someone else took over as host.'); }
+              draw();
+            });
+          } else { draw(); }
+        } else if (++fails >= 2) { showErr("Can't reach the TV. Check you are on the same WiFi."); }
+      } catch (e) { if (window.console) { console.log(e); } }
+      if (!once) { setTimeout(tick, 1000); }
+    });
+  }
+
+  $('settingsBtn').onclick = function () { settingsOpen = !settingsOpen; $('settings').className = settingsOpen ? '' : 'hidden'; if (settingsOpen) { drawSettings(); $('settings').scrollIntoView(); } };
+  $('homeBtn').onclick = function () { if (window.confirm('Go back to the main menu for everyone?')) { HubClient.home(); } };
+  try { HubClient.start({ kind: 'phone', app: APP }); } catch (e) { /* Page still works. */ }
+  tick();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reverse Charades</title>
+<style>
+html { background: #0c201b; }
+/* Hold the screen back until its first real data has been drawn, so a half-built screen never flashes up.
+   The animation is only a fallback: if no data arrives, the screen shows itself after 2.5 s anyway. */
+body { opacity: 0; -webkit-animation: ptvShow 0s 2.5s forwards; animation: ptvShow 0s 2.5s forwards; }
+body.ptv-ready { opacity: 1; -webkit-animation: none; animation: none; }
+@-webkit-keyframes ptvShow { to { opacity: 1; } } @keyframes ptvShow { to { opacity: 1; } }
+
+/* 1rem is 100px on a 1920x1080 screen; fit() rescales it for any other viewport. */
+html { font-size: 100px; }
+html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0c201b; }
+body { color: #f3eee2; font-family: Roboto, "Noto Sans Devanagari", "Nirmala UI", "Segoe UI", Arial, sans-serif; font-size: .36rem; }
+::-webkit-scrollbar { display: none; }
+.hidden { display: none !important; }
+
+#stage { position: absolute; left: 50%; top: 50%; width: 19.2rem; height: 10.8rem; margin: -5.4rem 0 0 -9.6rem; overflow: hidden;
+  background: #0c201b; background: radial-gradient(ellipse at 50% 38%, #17403a 0, #0c201b 60%, #0c201b 100%); }
+
+/* Time left, across the very top */
+#bar { position: absolute; left: 0; right: 0; top: 0; height: .14rem; background: #143630; }
+#barFill { width: 100%; height: 100%; background: #d9b26a; -webkit-transform-origin: 0 50%; transform-origin: 0 50%;
+  -webkit-transition: -webkit-transform .5s linear; transition: transform .5s linear; }
+#barFill.hot { background: #b4553f; }
+
+/* Title, on the screens between turns */
+#title { position: absolute; font-family: Georgia, "Noto Serif", "Droid Serif", serif; left: .35rem; top: .3rem; font-size: .84rem; line-height: 1.1; font-weight: 700; color: #d9b26a; white-space: nowrap; }
+#roundText { position: absolute; right: .35rem; top: .36rem; font-size: .66rem; line-height: 1.1; font-weight: 700; color: #f3eee2; white-space: nowrap; }
+
+/* Who is doing what. The same three cards, large before the turn and in a strip during it. */
+.role { position: absolute; box-sizing: border-box; overflow: hidden; background: #0c201b; border: .05rem solid #2f5c52; color: #f3eee2; }
+.role .rl { font-weight: 700; color: #d9b26a; white-space: nowrap; overflow: hidden; }
+.role .rb { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; overflow: hidden; }
+.role .rn { font-weight: 700; line-height: 1.08; max-width: 100%; word-wrap: break-word; }
+.role.act { background: #d9b26a; border-color: #f3eee2; color: #0c201b; }
+.role.act .rl { color: #1d4a41; }
+
+#roles.big .role { top: 1.4rem; width: 6.04rem; height: 4.5rem; padding: .22rem .3rem; text-align: center; }
+#roles.big #cAct { left: .35rem; }
+#roles.big #cGuess { left: 6.58rem; }
+#roles.big #cRef { left: 12.81rem; }
+#roles.big .rl { font-size: .5rem; line-height: 1.2; }
+#roles.big .rb { height: 1.96rem; margin-top: .06rem; -webkit-justify-content: center; justify-content: center; }
+#roles.big .rd { margin-top: .08rem; font-size: .46rem; line-height: 1.2; }
+
+#roles.strip .role { top: .26rem; height: 1.66rem; padding: .08rem .22rem; }
+#roles.strip #cAct { left: .35rem; width: 5.4rem; }
+#roles.strip #cGuess { left: 5.87rem; width: 5.1rem; }
+#roles.strip #cRef { left: 11.09rem; width: 4.3rem; }
+#roles.strip .rl { font-size: .34rem; line-height: 1.2; }
+#roles.strip .rb { height: 1.1rem; }
+#roles.strip .rd { display: none; }
+
+#timer { position: absolute; left: 15.51rem; top: .26rem; width: 3.34rem; height: 1.66rem; line-height: 1.62rem; box-sizing: border-box; text-align: center;
+  font-size: 1.56rem; font-weight: 700; color: #f3eee2; background: #0c201b; border: .05rem solid #d9b26a; }
+#timer.hot { background: #b4553f; border-color: #fff; color: #fff; -webkit-animation: pulse 1s ease-in-out infinite; animation: pulse 1s ease-in-out infinite; }
+@-webkit-keyframes pulse { 50% { -webkit-transform: scale(1.05); } }
+@keyframes pulse { 50% { transform: scale(1.05); } }
+
+/* The prompt. Nearly black behind white for the most contrast across a room. */
+#panel { position: absolute; left: .35rem; top: 2.04rem; width: 18.5rem; height: 5.86rem; box-sizing: border-box; background: #091915; border: .07rem solid #2f5c52; overflow: hidden; }
+#panel.good { border-color: #7cc49a; background: #0f3326; }
+#panel.skip { border-color: #f3eee2; background: #1d2b28; }
+#panel.foul { border-color: #b4553f; background: #2e1d18; }
+#catRow { position: absolute; left: 0; right: 0; top: .1rem; height: .82rem; text-align: center; white-space: nowrap; }
+.cat { display: inline-block; height: .78rem; line-height: .78rem; padding: 0 .34rem; font-size: .58rem; font-weight: 700; letter-spacing: .02rem; color: #0c201b; background: #d9b26a; }
+#flashChip { position: absolute; right: .14rem; top: .1rem; height: .78rem; line-height: .78rem; padding: 0 .26rem; font-size: .56rem; font-weight: 700; white-space: nowrap; }
+#flashChip.good { color: #0c201b; background: #7cc49a; }
+#flashChip.skip { color: #0c201b; background: #f3eee2; }
+#flashChip.foul { color: #fff; background: #b4553f; }
+#deckNote { position: absolute; left: .14rem; top: .14rem; width: 5rem; font-size: .3rem; line-height: 1.15; color: #f3eee2; white-space: normal; text-align: left; }
+#promptBox { position: absolute; left: .22rem; right: .22rem; top: .96rem; bottom: .08rem; display: -webkit-flex; display: flex;
+  -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; overflow: hidden; }
+#promptText { -webkit-flex: none; flex: none; font-weight: 700; line-height: 1.08; text-align: center; color: #fff; }
+.pop { -webkit-animation: pop .22s ease-out; animation: pop .22s ease-out; }
+@-webkit-keyframes pop { 0% { -webkit-transform: scale(.86); } 100% { -webkit-transform: scale(1); } }
+@keyframes pop { 0% { transform: scale(.86); } 100% { transform: scale(1); } }
+
+/* Countdown and pause use the same panel, with no prompt in it. */
+#bigBox { position: absolute; left: .2rem; right: .2rem; top: .1rem; bottom: .1rem; text-align: center; }
+#bigMain { font-weight: 700; color: #d9b26a; }
+#bigMain.count { font-size: 3.9rem; line-height: 4.1rem; color: #fff; }
+#bigMain.word { margin-top: .9rem; font-size: 2.2rem; line-height: 1.2; }
+#bigSub { font-size: .66rem; line-height: 1.2; color: #f3eee2; }
+#bigMain.word + #bigSub { margin-top: .2rem; }
+#bigMain.check { margin-top: .12rem; font-size: 1.26rem; line-height: 1.2; white-space: nowrap; }
+#bigMain.check + #bigSub { margin-top: .04rem; }
+#bigNum { font-size: 2.7rem; line-height: 1.2; font-weight: 700; color: #fff; white-space: nowrap; }
+
+#rule { position: absolute; left: .35rem; right: .35rem; top: 7.96rem; height: .56rem; line-height: .56rem; text-align: center; font-size: .46rem; font-weight: 700; color: #d9b26a; white-space: nowrap; overflow: hidden; }
+#hint { position: absolute; left: .35rem; right: .35rem; top: 8.52rem; height: .54rem; line-height: .54rem; text-align: center; font-size: .36rem; white-space: nowrap; overflow: hidden; color: #f3eee2; }
+.key { display: inline-block; padding: 0 .12rem; height: .42rem; line-height: .42rem; margin: 0 .1rem 0 .34rem; color: #0c201b; background: #d9b26a; font-size: .28rem; font-weight: 700; vertical-align: .02rem; }
+
+/* This turn's numbers */
+#stats { position: absolute; left: .35rem; top: 9.12rem; width: 8rem; height: 1.5rem; display: -webkit-flex; display: flex; }
+.stat { -webkit-flex: 1 1 0; flex: 1 1 0; min-width: 0; margin-right: .1rem; box-sizing: border-box; background: #143630; border: .04rem solid #2f5c52; text-align: center; padding-top: .08rem; overflow: hidden; }
+.stat .sl { font-size: .3rem; line-height: 1.2; color: #f3eee2; white-space: nowrap; overflow: hidden; }
+.stat .sv { font-size: .86rem; line-height: 1.12; font-weight: 700; color: #d9b26a; }
+
+/* Team scores */
+#board { position: absolute; display: -webkit-flex; display: flex; }
+#board.turn { left: 8.45rem; top: 9.12rem; width: 10.4rem; height: 1.5rem; }
+#board.wide { left: .35rem; top: 9.12rem; width: 18.5rem; height: 1.5rem; }
+#board.part { left: .35rem; top: 9.12rem; width: 11.9rem; height: 1.5rem; }
+.chip { -webkit-flex: 1 1 0; flex: 1 1 0; min-width: 0; box-sizing: border-box; margin-left: .1rem; background: #143630; border: .04rem solid #2f5c52; padding: .06rem .14rem; text-align: center; overflow: hidden; }
+.chip:first-child { margin-left: 0; }
+.chip .nb { height: .54rem; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; overflow: hidden; }
+.chip .n { font-weight: 700; line-height: 1.1; color: #f3eee2; }
+.chip .v { font-size: .76rem; line-height: 1.05; font-weight: 700; color: #d9b26a; }
+.chip.cur { background: #d9b26a; border-color: #f3eee2; }
+.chip.cur .n, .chip.cur .v { color: #0c201b; }
+
+/* Before the turn */
+#startBox { position: absolute; left: .35rem; top: 6.1rem; width: 15.1rem; height: 2.86rem; box-sizing: border-box; background: #143630; border: .05rem solid #d9b26a; text-align: center; padding-top: .16rem; }
+#startMain { font-size: 1.14rem; line-height: 1.2; font-weight: 700; color: #d9b26a; }
+#startMain .key { height: 1rem; line-height: 1rem; padding: 0 .32rem; font-size: .8rem; margin: 0 .3rem 0 0; vertical-align: .06rem; }
+#startSub { margin-top: .1rem; font-size: .44rem; line-height: 1.25; color: #f3eee2; }
+#readyNote { margin-top: .12rem; font-size: .36rem; line-height: .5rem; color: #f3eee2; white-space: nowrap; overflow: hidden; }
+#readyNote .key { margin: 0 .12rem 0 0; }
+#readyNote.on { color: #d9b26a; font-weight: 700; }
+#qrWrap { position: absolute; left: 15.62rem; top: 6.1rem; width: 3.23rem; height: 2.86rem; text-align: center; }
+#qrBox { box-sizing: border-box; margin: 0 auto; width: 2.2rem; height: 2.2rem; background: #fff; padding: .08rem; }
+#qrBox img { display: block; width: 100%; height: 100%; }
+#qrText { margin-top: .06rem; font-size: .3rem; line-height: 1.2; color: #f3eee2; }
+
+/* After the turn */
+#sumLeft { position: absolute; left: .35rem; top: 1.3rem; width: 5.3rem; height: 7.62rem; box-sizing: border-box; background: #143630; border: .05rem solid #d9b26a; text-align: center; padding: .24rem .2rem; }
+#sumTeamBox { height: 1.2rem; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; overflow: hidden; }
+#sumTeam { font-weight: 700; line-height: 1.1; color: #f3eee2; max-width: 100%; word-wrap: break-word; }
+#sumPoints { font-size: 2.6rem; line-height: 1.1; font-weight: 700; color: #d9b26a; }
+#sumWord { font-size: .5rem; line-height: 1.2; color: #f3eee2; }
+#sumCounts { margin-top: .36rem; font-size: .46rem; line-height: 1.5; color: #f3eee2; }
+#sumList { position: absolute; left: 5.8rem; top: 1.3rem; width: 13.05rem; height: 7.62rem; box-sizing: border-box; background: #091915; border: .05rem solid #2f5c52; padding: .14rem .1rem; overflow: hidden;
+  display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-flex-wrap: wrap; flex-wrap: wrap; -webkit-align-content: flex-start; align-content: flex-start; }
+.res { box-sizing: border-box; padding: .05rem .1rem; display: -webkit-flex; display: flex; -webkit-align-items: flex-start; align-items: flex-start; line-height: 1.16; color: #fff; }
+.res .m { -webkit-flex: none; flex: none; width: 1em; height: 1em; margin: .1em .28em 0 0; }
+.res .m svg { display: block; width: 100%; height: 100%; }
+.res .tx { min-width: 0; -webkit-flex: 1 1 0; flex: 1 1 0; }
+.res.skipped .tx, .res.unguessed .tx { color: #d9c4a3; }
+#sumEmpty { font-size: .6rem; color: #a9bfb7; padding: .3rem; }
+#nextBox { position: absolute; left: 12.35rem; top: 9.12rem; width: 6.5rem; height: 1.5rem; box-sizing: border-box; background: #d9b26a; color: #0c201b; padding: .08rem .16rem; text-align: center; overflow: hidden; }
+#nextBoxTop { height: .78rem; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; overflow: hidden; }
+#nextName { font-weight: 700; line-height: 1.08; max-width: 100%; }
+#nextKey { font-size: .4rem; line-height: 1.3; font-weight: 700; }
+#nextKey .key { background: #0c201b; color: #d9b26a; margin: 0 .12rem 0 0; vertical-align: .01rem; }
+
+/* Streak bonus. A few separate flames that only exist for two seconds. */
+#fire { position: absolute; left: 0; right: 0; bottom: 0; height: 2.8rem; overflow: hidden; }
+.flame { position: absolute; bottom: -.1rem; width: 2.8rem; height: 2.9rem; -webkit-transform-origin: 50% 100%; transform-origin: 50% 100%;
+  -webkit-animation: flame 1.9s ease-out both; animation: flame 1.9s ease-out both; }
+.flame svg { display: block; width: 100%; height: 100%; }
+@-webkit-keyframes flame { 0% { -webkit-transform: scale(.7, .1); } 15% { -webkit-transform: scale(1, 1); } 30% { -webkit-transform: scale(.88, .78); } 45% { -webkit-transform: scale(1, 1.02); } 60% { -webkit-transform: scale(.9, .8); } 78% { -webkit-transform: scale(1, .94); } 100% { -webkit-transform: scale(.7, 0); } }
+@keyframes flame { 0% { transform: scale(.7, .1); } 15% { transform: scale(1, 1); } 30% { transform: scale(.88, .78); } 45% { transform: scale(1, 1.02); } 60% { transform: scale(.9, .8); } 78% { transform: scale(1, .94); } 100% { transform: scale(.7, 0); } }
+#fireChip { position: absolute; left: .14rem; top: .1rem; height: .78rem; line-height: .78rem; padding: 0 .26rem; font-size: .54rem; font-weight: 700; color: #0c201b; background: #c7834f; white-space: nowrap; }
+
+#reconnect { position: absolute; left: 0; right: 0; bottom: 0; padding: .16rem; text-align: center; background: #000; color: #d9b26a; font-size: .46rem; }
+
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bar"><div id="barFill"></div></div>
+
+  <div id="title">Reverse Charades</div>
+  <div id="roundText">Round 1</div>
+
+  <div id="roles" class="big">
+    <div class="role act" id="cAct"><div class="rl">ACTING</div><div class="rb"><div class="rn" id="nAct"></div></div><div class="rd">Act out what your<br>phones show.</div></div>
+    <div class="role" id="cGuess"><div class="rl" id="lGuess">GUESSING</div><div class="rb"><div class="rn" id="nGuess"></div></div><div class="rd" id="dGuess"></div></div>
+    <div class="role" id="cRef"><div class="rl" id="lRef">REFEREE</div><div class="rb"><div class="rn" id="nRef"></div></div><div class="rd">Taps Got it on a phone,<br>and calls fouls.</div></div>
+  </div>
+
+  <div id="timer">60</div>
+
+  <div id="panel">
+    <div id="promptArea">
+      <div id="catRow"><span class="cat" id="catChip">MOVIE</span></div>
+      <div id="promptBox"><div id="promptText"></div></div>
+    </div>
+    <div id="bigBox" class="hidden"><div id="bigMain"></div><div id="bigSub"></div><div id="bigNum" class="hidden"></div></div>
+    <div id="deckNote" class="hidden"></div>
+    <div id="fireChip" class="hidden">ON FIRE! +3</div>
+    <div id="flashChip" class="hidden"></div>
+  </div>
+
+  <div id="rule">No words. No mouthing. Sound effects allowed.</div>
+  <div id="hint"></div>
+
+  <div id="stats">
+    <div class="stat"><div class="sl">CORRECT</div><div class="sv" id="stCorrect">0</div></div>
+    <div class="stat"><div class="sl" id="slSkips">FREE SKIPS LEFT</div><div class="sv" id="stSkips">2</div></div>
+    <div class="stat" style="margin-right:0"><div class="sl">STREAK</div><div class="sv" id="stStreak">0</div></div>
+  </div>
+
+  <div id="startBox">
+    <div id="startMain"><span class="key">OK</span>Start the turn</div>
+    <div id="startSub"></div>
+    <div id="readyNote"><span class="key">UP</span><span id="readyNoteText"></span></div>
+  </div>
+  <div id="qrWrap" class="hidden">
+    <div id="qrBox"><img id="qr" alt=""></div>
+    <div id="qrText">Scan to join</div>
+  </div>
+
+  <div id="sumLeft">
+    <div id="sumTeamBox"><div id="sumTeam"></div></div>
+    <div id="sumPoints">0</div>
+    <div id="sumWord">points this turn</div>
+    <div id="sumCounts"></div>
+  </div>
+  <div id="sumList"></div>
+  <div id="nextBox">
+    <div id="nextBoxTop"><div id="nextName"></div></div>
+    <div id="nextKey"><span class="key">OK</span>Next team</div>
+  </div>
+
+  <div id="board" class="wide"></div>
+  <div id="fire" class="hidden"></div>
+  <div id="reconnect" class="hidden">Reconnecting...</div>
+</div>
+
+<script src="/shared/hub-client.js"></script>
+<script>
+(function () {
+  var APP = 'reverse-charades';
+  var STATE_URL = '/api/app/' + APP + '/tv-state'; // Only this page reads tv-state. Phones never do.
+  var ACTION_URL = '/api/app/' + APP + '/action';
+  var POLL_MS = 500;
+  var COUNTDOWN_POLL_MS = 200; // So the prompt appears the moment the countdown ends.
+  var FAIL_LIMIT = 2;
+  var PAGE_DEAD_MS = 20000;
+  var ACTION_DEAD_MS = 3000;
+  var PROMPT_KEY_LOCK_MS = 500; // A double press of OK must not also score the prompt that just appeared.
+  var PHASE_OK_LOCK_MS = 700;   // Nor start the turn it just moved on to.
+  var FLASH_MS = 900;
+  var FIRE_MS = 1950;
+  var TURN_SECONDS = 60;
+  var UPPER_MAX = 14;           // Short prompts read best in capitals: TITANIC. Longer ones wrap better in normal case.
+  var PROMPT_MAX = 4.3, PROMPT_MIN = .9;
+
+  function $(id) { return document.getElementById(id); }
+  function now() { return new Date().getTime(); }
+  function setText(el, text) {
+    if (el.__text !== text) { el.__text = text; el.textContent = text; }
+  }
+  function show(id, on) {
+    var el = $(id);
+    var has = /(^| )hidden( |$)/.test(el.className);
+    if (on && has) {
+      el.className = el.className.replace(/(^| )hidden( |$)/, ' ').replace(/^ +| +$/g, '');
+    } else if (!on && !has) {
+      el.className = el.className ? el.className + ' hidden' : 'hidden';
+    }
+  }
+  function setClass(el, cls) {
+    if (el.className !== cls) { el.className = cls; }
+  }
+
+  var remPx = 100;
+  var fitted = []; // Text boxes to measure again when the screen size changes.
+
+  function fit() {
+    var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    if (s > 0) {
+      document.documentElement.style.fontSize = (100 * s) + 'px';
+      remPx = 100 * s;
+    }
+    for (var i = 0; i < fitted.length; i++) {
+      var el = fitted[i];
+      el.__fitKey = null;
+      fitText(el, el.__text || '', el.__fitMax, el.__fitMin);
+    }
+    promptKey = null;
+    sumKey = null;
+    if (state) { render(state); }
+  }
+
+  // Sets the text at the largest size that fits its parent box.
+  function fitText(el, text, maxRem, minRem) {
+    var key = text + '|' + remPx + '|' + maxRem;
+    if (el.__fitKey === key) { return; }
+    if (!el.__fitReg) {
+      el.__fitReg = true;
+      fitted.push(el);
+    }
+    el.__fitMax = maxRem;
+    el.__fitMin = minRem;
+    setText(el, text);
+    var box = el.parentNode;
+    var maxH = box.clientHeight;
+    var maxW = box.clientWidth;
+    if (maxH <= 0 || maxW <= 0) { return; } // Hidden right now: leaves the key unset, so the next draw measures it.
+    el.__fitKey = key;
+    var size = maxRem;
+    while (size > minRem) {
+      el.style.fontSize = size + 'rem';
+      if (el.offsetHeight <= maxH && el.scrollWidth <= maxW + 1) { return; }
+      size = Math.round((size - .04) * 100) / 100;
+    }
+    el.style.fontSize = minRem + 'rem';
+  }
+
+  // The prompt: as large as the panel allows, breaking only between words, with its lines evened out so a long prompt
+  // never leaves one word alone on the last line. Runs only when the prompt changes.
+  var promptKey = null;
+  function fitPrompt(text) {
+    var key = text + '|' + remPx;
+    if (promptKey === key) { return; }
+    var el = $('promptText');
+    var box = $('promptBox');
+    var shown = text.length <= UPPER_MAX ? text.toUpperCase() : text;
+    if (el.textContent !== shown) { el.textContent = shown; }
+    var W = box.clientWidth, H = box.clientHeight;
+    if (W <= 0 || H <= 0) { return; } // Not on screen yet: the next draw measures it.
+    promptKey = key;
+
+    function fits(px) {
+      el.style.fontSize = px + 'px';
+      return el.offsetHeight <= H && el.scrollWidth <= W;
+    }
+    function largest(lo, hi) {
+      if (fits(hi)) { return hi; }
+      for (var i = 0; i < 9 && hi - lo > .5; i++) {
+        var mid = (lo + hi) / 2;
+        if (fits(mid)) { lo = mid; } else { hi = mid; }
+      }
+      return Math.floor(lo);
+    }
+
+    el.style.width = W + 'px';
+    el.style.wordWrap = 'normal';
+    var lowPx = PROMPT_MIN * remPx;
+    var px;
+    if (fits(lowPx)) {
+      px = largest(lowPx, PROMPT_MAX * remPx);
+    } else {
+      // One enormous word with no spaces. Breaking it is better than clipping it.
+      el.style.wordWrap = 'break-word';
+      px = largest(.3 * remPx, PROMPT_MAX * remPx);
+    }
+    el.style.fontSize = px + 'px';
+
+    var height = el.offsetHeight;
+    var lines = Math.round(height / (px * 1.08));
+    if (lines > 1) {
+      var lo = W / lines, hi = W;
+      for (var i = 0; i < 8; i++) {
+        var w = (lo + hi) / 2;
+        el.style.width = w + 'px';
+        if (el.offsetHeight === height && el.scrollWidth <= w) { hi = w; } else { lo = w; }
+      }
+      el.style.width = Math.min(W, Math.ceil(hi) + 2) + 'px';
+    }
+  }
+
+  // --- networking ---
+  function request(method, url, body, timeout, done) {
+    var xhr = new XMLHttpRequest();
+    var finished = false;
+    function finish(data) {
+      if (finished) { return; }
+      finished = true;
+      done(data);
+    }
+    try {
+      xhr.open(method, url, true);
+      xhr.timeout = timeout;
+      if (body) { xhr.setRequestHeader('Content-Type', 'application/json'); }
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState !== 4) { return; }
+        var data = null;
+        if (xhr.status === 200) {
+          try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+        }
+        finish(data);
+      };
+      xhr.ontimeout = function () { finish(null); };
+      xhr.onerror = function () { finish(null); };
+      xhr.send(body ? JSON.stringify(body) : null);
+    } catch (e) {
+      finish(null);
+    }
+  }
+
+  // --- sound: all of it optional, and only neutral. Nothing here can hint at a prompt. ---
+  var audio = null;
+  var audioFailed = false;
+  function ctx() {
+    if (audioFailed) { return null; }
+    try {
+      if (!audio) {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) { audioFailed = true; return null; }
+        audio = new AC();
+      }
+      if (audio.state === 'suspended' && audio.resume) {
+        var p = audio.resume();
+        if (p && p['catch']) { p['catch'](function () {}); }
+      }
+      return audio;
+    } catch (e) {
+      audioFailed = true;
+      return null;
+    }
+  }
+  function tone(freq, ms, type, gain, delayMs) {
+    try {
+      var c = ctx();
+      if (!c) { return; }
+      var t = c.currentTime + (delayMs || 0) / 1000;
+      var o = c.createOscillator();
+      var g = c.createGain();
+      o.type = type;
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(gain, t);
+      g.gain.exponentialRampToValueAtTime(0.0008, t + ms / 1000);
+      o.connect(g);
+      g.connect(c.destination);
+      o.start(t);
+      o.stop(t + ms / 1000 + .02);
+    } catch (e) {
+      if (window.console) { console.log('Sound error: ' + e); }
+    }
+  }
+  function soundChime() {
+    tone(784, 180, 'triangle', .28);
+    tone(1175, 320, 'triangle', .3, 90);
+  }
+  function soundSkip() { tone(330, 200, 'sine', .16); }
+  function soundBeep() { tone(880, 170, 'square', .14); }
+  function soundBuzzer() {
+    tone(160, 800, 'sawtooth', .3);
+    tone(120, 800, 'sawtooth', .22);
+  }
+
+  // --- state ---
+  var state = null;
+  var lastPhase = null;
+  var lastSeconds = null;
+  var lastPromptId = null;
+  var popFor = null;
+  var lastTurn = null;
+  var lastBonus = null;
+  var phaseChangedAt = 0;
+  var promptChangedAt = 0;
+  var fails = 0;
+  var lastPollAt = now();
+  var hubJoinUrl = null;
+  var qrFor = null;
+  var flashTimer = null;
+  var fireTimer = null;
+
+  function team(s, id) {
+    var list = s.teams || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === id) { return list[i]; }
+    }
+    return null;
+  }
+  function currentTeamName(s) {
+    var t = team(s, s.currentTeamId);
+    return t ? t.name : '';
+  }
+  function nextTeamName(s) {
+    var list = s.teams || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === s.currentTeamId) { return list[(i + 1) % list.length].name; }
+    }
+    return '';
+  }
+  function guesserText(s) {
+    if (s.guesser) { return s.guesser; }
+    return currentTeamName(s) + ': pick a guesser';
+  }
+
+  function applyState(s) {
+    var prev = lastPhase;
+    state = s;
+    if (s.phase !== prev) {
+      phaseChangedAt = now();
+      lastPhase = s.phase;
+    }
+    var secs = Math.max(0, Math.ceil(Number(s.secondsLeft) || 0));
+
+    if (s.phase === 'performing') {
+      if (secs !== lastSeconds && secs >= 1 && secs <= 5) { soundBeep(); }
+    } else if (prev === 'performing' && s.phase === 'summary' && lastSeconds !== null && lastSeconds <= 2) {
+      soundBuzzer();
+    }
+    lastSeconds = s.phase === 'performing' ? secs : null;
+
+    if (s.promptId !== lastPromptId) {
+      lastPromptId = s.promptId;
+      promptChangedAt = now();
+    }
+    noticeScoring(s);
+    if (lastBonus !== null && s.bonusAt > lastBonus) { startFire(); }
+    lastBonus = s.bonusAt || 0;
+
+    render(s);
+  }
+
+  // The prompt flips the moment someone scores, so the room needs to see why: a coloured flash, a word and a sound.
+  function noticeScoring(s) {
+    var t = s.phase === 'performing' || s.phase === 'paused' ? (s.turn || null) : null;
+    if (t && lastTurn) {
+      if (t.correct > lastTurn.correct) {
+        soundChime();
+        flash('good', 'GOT IT +1');
+      } else if (t.skips > lastTurn.skips) {
+        soundSkip();
+        flash('skip', lastTurn.freeSkipsLeft > 0 ? 'SKIPPED' : 'SKIPPED -1');
+      } else if (t.fouls > lastTurn.fouls) {
+        flash('foul', 'FOUL -1');
+      } else if (t.correct < lastTurn.correct || t.skips < lastTurn.skips || t.fouls < lastTurn.fouls) {
+        flash('skip', 'UNDONE');
+      }
+    }
+    lastTurn = t ? { correct: t.correct, skips: t.skips, fouls: t.fouls, freeSkipsLeft: t.freeSkipsLeft } : null;
+  }
+
+  function flash(kind, word) {
+    setClass($('panel'), kind);
+    setText($('flashChip'), word);
+    setClass($('flashChip'), kind);
+    if (flashTimer) { clearTimeout(flashTimer); }
+    flashTimer = setTimeout(function () {
+      flashTimer = null;
+      setClass($('panel'), '');
+      show('flashChip', false);
+      if (state) { render(state); } // Clearing the class also cleared "hidden" if the turn has ended.
+    }, FLASH_MS);
+  }
+
+  function startFire() {
+    var box = $('fire');
+    while (box.firstChild) { box.removeChild(box.firstChild); }
+    var FLAME = '<svg viewBox="0 0 100 120" preserveAspectRatio="none">' +
+      '<path d="M50 2 C58 30 92 46 88 82 C85 108 66 120 50 120 C34 120 15 108 12 82 C9 58 30 50 34 28 C42 36 46 20 50 2Z" fill="#c7834f"/>' +
+      '<path d="M50 40 C56 60 74 70 72 92 C70 110 60 120 50 120 C40 120 30 110 28 92 C27 76 44 64 50 40Z" fill="#d9b26a"/>' +
+      '<path d="M50 74 C54 86 62 92 61 104 C60 114 55 120 50 120 C45 120 40 114 39 104 C38 94 47 88 50 74Z" fill="#f3eee2"/></svg>';
+    var count = 8;
+    for (var i = 0; i < count; i++) {
+      var f = document.createElement('div');
+      f.className = 'flame';
+      f.style.left = (i * 2.4 - .2) + 'rem';
+      f.style.webkitAnimationDelay = f.style.animationDelay = (i % 3) * 60 + 'ms';
+      f.innerHTML = FLAME;
+      box.appendChild(f);
+    }
+    show('fire', true);
+    // Top left beside the category when the prompt is on screen. Otherwise the heading is there, so bottom left.
+    var chip = $('fireChip');
+    var withPrompt = !!(state && state.prompt);
+    chip.style.top = withPrompt ? '.1rem' : 'auto';
+    chip.style.bottom = withPrompt ? 'auto' : '.1rem';
+    show('fireChip', true);
+    if (fireTimer) { clearTimeout(fireTimer); }
+    fireTimer = setTimeout(function () {
+      fireTimer = null;
+      show('fire', false);
+      show('fireChip', false);
+      while (box.firstChild) { box.removeChild(box.firstChild); }
+    }, FIRE_MS);
+  }
+
+  // --- drawing ---
+  function render(s) {
+    var phase = s.phase;
+    var inTurn = phase === 'countdown' || phase === 'performing' || phase === 'paused';
+    var ready = phase === 'ready';
+    var summary = phase === 'summary';
+
+    show('title', !inTurn);
+    show('roundText', !inTurn);
+    setText($('roundText'), 'Round ' + (s.round || 1));
+    show('timer', inTurn);
+    show('bar', inTurn);
+    show('panel', inTurn);
+    show('rule', inTurn);
+    show('hint', inTurn);
+    show('stats', inTurn);
+    show('startBox', ready);
+    show('sumLeft', summary);
+    show('sumList', summary);
+    show('nextBox', summary);
+
+    setClass($('roles'), inTurn ? 'strip' : 'big');
+    show('roles', !summary);
+    setClass($('board'), inTurn ? 'turn' : (summary ? 'part' : 'wide'));
+
+    if (!summary) { renderRoles(s, inTurn); }
+    if (inTurn) {
+      renderClock(s);
+      renderPanel(s);
+      renderHint(s);
+      renderStats(s);
+    }
+    renderQr(ready);
+    if (ready) { renderReady(s); }
+    if (summary) { renderSummary(s); }
+    renderBoard(s, inTurn);
+  }
+
+  function renderRoles(s, inTurn) {
+    setText($('lGuess'), inTurn ? (s.promptOnTv ? 'GUESSING, BACK TO THE TV' : 'GUESSING, NO PHONE') : 'GUESSING');
+    setText($('lRef'), 'REFEREE');
+    if (s.promptOnTv) {
+      $('dGuess').innerHTML = 'Back to the TV.<br>Shout your answers.';
+    } else {
+      $('dGuess').innerHTML = 'Pick I\'m guessing.<br>Shout your answers.';
+    }
+    var max = inTurn ? .8 : 1.3, min = inTurn ? .32 : .5;
+    fitText($('nAct'), currentTeamName(s), max, min);
+    fitText($('nGuess'), guesserText(s), max + .01, min);
+    fitText($('nRef'), s.refereeTeamName || 'Other team', max + .02, min);
+  }
+
+  function renderClock(s) {
+    var left = Math.max(0, Math.ceil(Number(s.secondsLeft) || 0));
+    if (s.phase === 'countdown') { left = TURN_SECONDS; }
+    var hot = left <= 10 && s.phase === 'performing';
+    setText($('timer'), String(left));
+    setClass($('timer'), hot ? 'hot' : '');
+    var frac = Math.max(0, Math.min(1, left / TURN_SECONDS));
+    var tf = 'scaleX(' + frac.toFixed(3) + ')';
+    var fill = $('barFill');
+    if (fill.__tf !== tf) {
+      fill.__tf = tf;
+      fill.style.webkitTransform = tf;
+      fill.style.transform = tf;
+    }
+    setClass(fill, hot ? 'hot' : '');
+  }
+
+  function renderPanel(s) {
+    // The prompt is on the phones unless the setting is on, and then tv-state carries it. A missing prompt means phones.
+    var p = s.phase === 'performing' ? s.prompt : null;
+    show('promptArea', !!p);
+    show('bigBox', !p);
+    show('bigNum', s.phase === 'performing' && !p);
+    var note = s.deckNote || '';
+    show('deckNote', !!note);
+    if (note) { setText($('deckNote'), note); }
+
+    if (s.phase === 'countdown') {
+      setClass($('bigMain'), 'count');
+      setText($('bigMain'), String(Math.max(1, Math.ceil(Number(s.countdownLeft) || 1))));
+      setText($('bigSub'), s.promptOnTv ? 'Guesser: back to the TV!' : 'Actors: check your phones. Guesser: no peeking!');
+      return;
+    }
+    if (s.phase === 'paused') {
+      setClass($('bigMain'), 'word');
+      setText($('bigMain'), 'Paused');
+      setText($('bigSub'), s.promptOnTv ? 'Prompt hidden. The guesser can turn around.' : 'The clock has stopped and the prompt is hidden.');
+      return;
+    }
+
+    // Performing, with the prompt on the phones.
+    if (!p) {
+      setClass($('bigMain'), 'check');
+      setText($('bigMain'), 'Actors: check your phones');
+      setText($('bigSub'), 'Guesser: shout your guess!');
+      setText($('bigNum'), ((s.turn && s.turn.correct) || 0) + ' correct');
+      return;
+    }
+    fitPrompt(p.text || '');
+    if (p.id !== popFor) {
+      popFor = p.id;
+      var el = $('promptText');
+      el.className = '';
+      void el.offsetWidth;
+      el.className = 'pop';
+    }
+  }
+
+  var hintKey = null;
+  function setHint(parts) {
+    var key = JSON.stringify(parts);
+    if (key === hintKey) { return; }
+    hintKey = key;
+    var box = $('hint');
+    while (box.firstChild) { box.removeChild(box.firstChild); }
+    for (var i = 0; i < parts.length; i++) {
+      if (parts[i].k) {
+        var k = document.createElement('span');
+        k.className = 'key';
+        k.textContent = parts[i].k;
+        box.appendChild(k);
+      }
+      box.appendChild(document.createTextNode(parts[i].t));
+    }
+  }
+  function renderHint(s) {
+    if (s.phase === 'performing') {
+      setHint([{ k: 'OK', t: 'Got it' }, { k: 'RIGHT', t: 'Skip' }, { k: 'DOWN', t: 'Foul' }, { k: 'UP', t: 'Pause' }, { k: 'LEFT', t: 'Undo. Or use a phone.' }]);
+    } else if (s.phase === 'paused') {
+      setHint([{ k: 'OK', t: 'Resume' }, { k: 'LEFT', t: 'Undo' }]);
+    } else {
+      setHint([{ t: 'Get ready. The prompt appears when the count ends.' }]);
+    }
+  }
+
+  function renderStats(s) {
+    var t = s.turn || {};
+    setText($('stCorrect'), String(t.correct || 0));
+    var free = t.freeSkipsLeft || 0;
+    setText($('slSkips'), free > 0 ? 'FREE SKIPS LEFT' : 'SKIPS COST 1');
+    setText($('stSkips'), String(free));
+    setText($('stStreak'), String(t.streak || 0));
+  }
+
+  function renderReady(s) {
+    setText($('startSub'), s.promptOnTv ? '3 second countdown, then 60 seconds. Prompt on TV and phones.'
+      : '3 second countdown, then 60 seconds. Prompt on actors\' phones.');
+    setClass($('readyNote'), s.promptOnTv ? 'on' : '');
+    setText($('readyNoteText'), s.promptOnTv ? 'Prompt on this TV: ON. Guesser, back to the TV. Up turns it off.'
+      : 'No phones? Prompt on this TV: Off. Only with the guesser\'s back turned.');
+  }
+
+  function renderQr(ready) {
+    var online = ready && !!hubJoinUrl && hubJoinUrl.indexOf('http') === 0;
+    show('qrWrap', online);
+    if (online && qrFor !== hubJoinUrl) {
+      qrFor = hubJoinUrl;
+      $('qr').src = '/qr.svg?u=' + encodeURIComponent(hubJoinUrl);
+    }
+  }
+
+  var MARKS = {
+    correct: '<svg viewBox="0 0 24 24"><path d="M3 13 L9 20 L21 5" fill="none" stroke="#7cc49a" stroke-width="4"/></svg>',
+    skipped: '<svg viewBox="0 0 24 24"><path d="M4 5 L12 12 L4 19 M13 5 L21 12 L13 19" fill="none" stroke="#d9b26a" stroke-width="3.5"/></svg>',
+    unguessed: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="#a9bfb7" stroke-width="3.5"/></svg>'
+  };
+
+  var sumKey = null;
+  function renderSummary(s) {
+    var t = s.turn || {};
+    fitText($('sumTeam'), currentTeamName(s), .8, .36);
+    var pts = t.points || 0;
+    setText($('sumPoints'), (pts > 0 ? '+' : '') + pts);
+    setText($('sumWord'), (pts === 1 || pts === -1) ? 'point this turn' : 'points this turn');
+    setText($('sumCounts'), (t.correct || 0) + ' correct, ' + (t.skips || 0) + ' skipped' + (t.fouls ? ', ' + t.fouls + (t.fouls === 1 ? ' foul' : ' fouls') : ''));
+    fitText($('nextName'), 'Next up: ' + nextTeamName(s), .6, .3);
+
+    var results = s.results || [];
+    var key = JSON.stringify(results) + '|' + remPx;
+    if (key === sumKey) { return; }
+    var box = $('sumList');
+    if (box.clientHeight <= 0) { return; }
+    sumKey = key;
+    while (box.firstChild) { box.removeChild(box.firstChild); }
+    if (!results.length) {
+      var none = document.createElement('div');
+      none.id = 'sumEmpty';
+      none.textContent = 'No prompts this turn.';
+      box.appendChild(none);
+      return;
+    }
+    var cols = results.length <= 7 ? 1 : (results.length <= 16 ? 2 : 3);
+    var size = cols === 1 ? .62 : (cols === 2 ? .46 : .34);
+    var frag = document.createDocumentFragment();
+    for (var i = 0; i < results.length; i++) {
+      var r = results[i];
+      var row = document.createElement('div');
+      var outcome = MARKS[r.outcome] ? r.outcome : 'unguessed';
+      row.className = 'res ' + outcome;
+      row.style.width = (100 / cols) + '%';
+      var m = document.createElement('div');
+      m.className = 'm';
+      m.innerHTML = MARKS[outcome]; // Fixed markup from this file. Prompt text goes in through textContent.
+      var tx = document.createElement('div');
+      tx.className = 'tx';
+      tx.textContent = r.text;
+      row.appendChild(m);
+      row.appendChild(tx);
+      frag.appendChild(row);
+    }
+    box.appendChild(frag);
+    // Long lists shrink until every row is inside the panel.
+    while (size > .2) {
+      box.style.fontSize = size + 'rem';
+      if (box.scrollWidth <= box.clientWidth + 1 && box.scrollHeight <= box.clientHeight + 1) { break; }
+      size = Math.round((size - .02) * 100) / 100;
+    }
+  }
+
+  var boardKey = null;
+  function renderBoard(s, inTurn) {
+    var list = s.teams || [];
+    var key = JSON.stringify(list) + '|' + s.currentTeamId + '|' + remPx + '|' + $('board').className;
+    if (key === boardKey) { return; }
+    boardKey = key;
+    var board = $('board');
+    while (board.firstChild) { board.removeChild(board.firstChild); }
+    for (var i = 0; i < list.length; i++) {
+      var c = document.createElement('div');
+      c.className = list[i].id === s.currentTeamId ? 'chip cur' : 'chip';
+      var nb = document.createElement('div');
+      nb.className = 'nb';
+      var n = document.createElement('div');
+      n.className = 'n';
+      var v = document.createElement('div');
+      v.className = 'v';
+      v.textContent = String(list[i].score || 0);
+      nb.appendChild(n);
+      c.appendChild(nb);
+      c.appendChild(v);
+      board.appendChild(c);
+      fitChipName(n, list[i].name);
+    }
+  }
+  function fitChipName(el, text) {
+    el.textContent = text;
+    var box = el.parentNode;
+    var size = .46;
+    while (size > .22) {
+      el.style.fontSize = size + 'rem';
+      if (el.offsetHeight <= box.clientHeight && el.scrollWidth <= box.clientWidth + 1) { return; }
+      size = Math.round((size - .02) * 100) / 100;
+    }
+  }
+
+  // --- remote ---
+  var actionBusyUntil = 0;
+
+  function act(body) {
+    var t = now();
+    if (t < actionBusyUntil) { return; }
+    actionBusyUntil = t + ACTION_DEAD_MS;
+    request('POST', ACTION_URL, body, 2500, function () {
+      actionBusyUntil = 0;
+      // The reply is the phone view, which has no prompt, so it is never drawn here. Fetch the TV view at once instead.
+      // A refused action is harmless: someone on a phone got there first. This just refreshes.
+      minSeq = pollSeq + 1;
+      pollNow();
+    });
+  }
+
+  function promptId(s) {
+    return s.promptId || (s.prompt ? s.prompt.id : null);
+  }
+
+  function onKey(name) {
+    if (!state) { return; }
+    ctx(); // Any key is a good moment to wake the audio, in case the browser kept it suspended.
+    var s = state;
+    var t = now();
+    var phase = s.phase;
+    if (phase === 'ready') {
+      if (name === 'ok' && t - phaseChangedAt >= PHASE_OK_LOCK_MS) { act({ action: 'start' }); }
+      if (name === 'up') { act({ action: 'set_prompt_on_tv', on: s.promptOnTv ? 'false' : 'true' }); }
+    } else if (phase === 'countdown') {
+      if (name === 'up') { act({ action: 'pause' }); }
+    } else if (phase === 'performing') {
+      if (name === 'up') {
+        // The guesser may turn round the moment pause is pressed, so the prompt goes before the server has answered.
+        s.phase = 'paused';
+        render(s);
+        act({ action: 'pause' });
+      } else if (name === 'down') {
+        act({ action: 'foul' });
+      } else if (name === 'left') {
+        act({ action: 'undo' });
+      } else if (name === 'ok' || name === 'right') {
+        if (t - phaseChangedAt < PHASE_OK_LOCK_MS || t - promptChangedAt < PROMPT_KEY_LOCK_MS) { return; }
+        act({ action: name === 'ok' ? 'got_it' : 'skip', promptId: promptId(s) });
+      }
+    } else if (phase === 'paused') {
+      if ((name === 'ok' || name === 'up') && t - phaseChangedAt >= PHASE_OK_LOCK_MS) {
+        act({ action: 'resume' });
+      } else if (name === 'left') {
+        act({ action: 'undo' });
+      }
+    } else if (phase === 'summary') {
+      if (name === 'ok' && t - phaseChangedAt >= PHASE_OK_LOCK_MS) { act({ action: 'next_turn' }); }
+      if (name === 'left') { act({ action: 'undo' }); } // A wrong tap in the last second can still be put right.
+    }
+  }
+
+  window.onRemoteKey = function (name) { guarded(onKey)(name); };
+  var KEYS = { 37: 'left', 38: 'up', 39: 'right', 40: 'down', 13: 'ok' };
+  document.onkeydown = function (e) {
+    var name = KEYS[e.keyCode];
+    if (name) {
+      if (e.preventDefault) { e.preventDefault(); }
+      if (!e.repeat) { window.onRemoteKey(name); }
+    } else if (e.keyCode === 27 && window.HubClient) {
+      // Escape stands in for Back when testing in a browser. On the TV the app handles Back.
+      HubClient.home();
+    }
+  };
+
+  // --- loops ---
+  function guarded(fn) {
+    return function (a, b) {
+      try {
+        return fn(a, b);
+      } catch (e) {
+        if (window.console) { console.log('Reverse Charades error: ' + e); }
+      }
+    };
+  }
+
+  var pollTimer = null;
+  var polling = false;
+  var pollAgain = false;
+  var pollSeq = 0;
+  var minSeq = 0; // A poll sent before an action finished may be out of date, so it is not drawn.
+
+  function pollNow() {
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+    poll();
+  }
+
+  function poll() {
+    if (polling) { pollAgain = true; return; }
+    polling = true;
+    pollSeq++;
+    var seq = pollSeq;
+    request('GET', STATE_URL, null, 2500, function (data) {
+      polling = false;
+      lastPollAt = now();
+      try {
+        if (data && data.phase) {
+          fails = 0; if (window.HubClient && HubClient.ready) { HubClient.ready(); }
+          if (seq >= minSeq) { applyState(data); }
+        } else {
+          fails++;
+        }
+        show('reconnect', fails >= FAIL_LIMIT);
+      } catch (e) {
+        if (window.console) { console.log('Reverse Charades draw error: ' + e); }
+      }
+      if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+      if (pollAgain) {
+        pollAgain = false;
+        poll();
+      } else {
+        pollTimer = setTimeout(poll, state && state.phase === 'countdown' ? COUNTDOWN_POLL_MS : POLL_MS);
+      }
+    });
+  }
+
+  // The join address lives on the hub, not in the game state.
+  function pollHub() {
+    request('GET', '/api/hub', null, 2500, function (data) {
+      try {
+        if (data && data.joinUrl) {
+          hubJoinUrl = data.joinUrl;
+          if (state) { renderQr(state.phase === 'ready'); }
+        }
+      } catch (e) {
+        if (window.console) { console.log('Reverse Charades hub error: ' + e); }
+      }
+      setTimeout(pollHub, hubJoinUrl ? 15000 : 2000);
+    });
+  }
+
+  // --- start ---
+  window.onresize = guarded(fit);
+  fit();
+  if (window.HubClient) {
+    try { HubClient.start({ kind: 'tv', app: APP }); } catch (e) { if (window.console) { console.log(e); } }
+  }
+  poll();
+  pollHub();
+  // Last resort, and exactly what a refresh would do. A poll always finishes within seconds, even with the server
+  // down, so a long silence means the page itself has stopped working.
+  setInterval(function () {
+    if (now() - lastPollAt > PAGE_DEAD_MS) { window.location.reload(); }
+  }, 5000);
+})();
+</script>
+</body>
+</html>

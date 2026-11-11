@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pictionary</title>
+<style>
+html { background: #0c201b; }
+/* Hold the screen back until its first real data has been drawn, so a half-built screen never flashes up.
+   The animation is only a fallback: if no data arrives, the screen shows itself after 2.5 s anyway. */
+body { opacity: 0; -webkit-animation: ptvShow 0s 2.5s forwards; animation: ptvShow 0s 2.5s forwards; }
+body.ptv-ready { opacity: 1; -webkit-animation: none; animation: none; }
+@-webkit-keyframes ptvShow { to { opacity: 1; } } @keyframes ptvShow { to { opacity: 1; } }
+
+/* 1rem is 100px on a 1920x1080 screen; fit() rescales it for any other viewport. */
+html { font-size: 100px; }
+html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0c201b; }
+body { color: #f3eee2; font-family: Roboto, "Noto Sans Devanagari", "Nirmala UI", "Segoe UI", Arial, sans-serif; font-size: .36rem; }
+.hidden { display: none !important; }
+#stage { position: absolute; left: 50%; top: 50%; width: 19.2rem; height: 10.8rem; margin: -5.4rem 0 0 -9.6rem; overflow: hidden; background: #0c201b; }
+
+/* The drawing. Same canvas in every phase, only its box changes, so nothing is ever redrawn for layout. */
+#paperBox { position: absolute; background: #f3eee2; border: .05rem solid #d9b26a; box-sizing: border-box; }
+#paper { display: block; width: 100%; height: 100%; }
+.draw #paperBox { left: .2rem; top: .2rem; width: 15.84rem; height: 8.91rem; }
+.sum #paperBox { left: 9.3rem; top: .3rem; width: 9.6rem; height: 5.4rem; }
+.full #paperBox { display: none; }
+
+#pauseBanner { position: absolute; left: .2rem; top: .2rem; width: 15.84rem; padding: .1rem 0; text-align: center; background: #000; color: #d9b26a; font-size: .5rem; font-weight: 700; }
+
+/* Edge column while drawing */
+#side { position: absolute; left: 16.2rem; top: .2rem; width: 2.8rem; height: 8.91rem; text-align: center; }
+#timer { font-size: 1.5rem; line-height: 1.8rem; height: 1.8rem; font-weight: 700; color: #d9b26a; background: #0c201b; }
+#timer.hot { background: #b4553f; color: #fff; }
+#teamLabel { margin-top: .16rem; font-size: .28rem; color: #a9bfb7; }
+#teamName { font-size: .44rem; line-height: 1.15; font-weight: 700; color: #d9b26a; word-wrap: break-word; }
+#drawerLine { margin-top: .06rem; font-size: .3rem; line-height: 1.2; color: #f3eee2; word-wrap: break-word; }
+#roundLine { margin-top: .06rem; font-size: .28rem; color: #a9bfb7; }
+
+/* Scores: a column at the edge, or a row under the panel */
+#scores { position: absolute; }
+.score { box-sizing: border-box; background: #143630; border: .04rem solid #2f5c52; overflow: hidden; }
+.score.cur { background: #d9b26a; border-color: #f3eee2; }
+.score.cur .sName, .score.cur .sVal { color: #0c201b; }
+.sName { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #f3eee2; }
+.sVal { display: block; font-weight: 700; color: #d9b26a; }
+.draw #scores { left: 16.2rem; top: 4.55rem; width: 2.8rem; }
+.draw .score { padding: .05rem .1rem; margin-bottom: .1rem; text-align: center; }
+.draw .sName { font-size: .3rem; line-height: 1.25; }
+.draw .sVal { font-size: .68rem; line-height: 1.1; }
+.full #scores, .sum #scores { left: .5rem; right: .5rem; top: 8.75rem; display: -webkit-flex; display: flex; -webkit-justify-content: center; justify-content: center; }
+.full .score, .sum .score { -webkit-flex: 1 1 0; flex: 1 1 0; min-width: 0; max-width: 5.6rem; margin: 0 .1rem; padding: .08rem .2rem; text-align: center; }
+.full .sName, .sum .sName { font-size: .42rem; line-height: 1.2; font-weight: 700; }
+.full .sVal, .sum .sVal { font-size: .8rem; line-height: 1.1; }
+
+/* Foot line while drawing */
+#foot { position: absolute; left: .2rem; top: 9.2rem; width: 18.8rem; height: 1.45rem; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; text-align: center; }
+#footText { font-size: .56rem; font-weight: 700; color: #f3eee2; white-space: nowrap; }
+.key { display: inline-block; padding: .02rem .18rem; margin: 0 .16rem 0 .6rem; color: #0c201b; background: #d9b26a; font-size: .4rem; font-weight: 700; vertical-align: .03rem; }
+#footSub { font-size: .42rem; color: #f3eee2; white-space: nowrap; }
+#stealRow { display: -webkit-flex; display: flex; margin-left: .3rem; }
+.pick { max-width: 3.6rem; margin-left: .14rem; padding: .08rem .26rem; font-size: .46rem; font-weight: 700; color: #f3eee2; background: #0c201b; border: .07rem solid #2f5c52; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pick.focus { color: #0c201b; background: #d9b26a; border-color: #f3eee2; }
+
+/* Ready and claimed */
+#panel { position: absolute; left: .5rem; right: .5rem; top: .4rem; height: 8.15rem; text-align: center; }
+#pTitle { font-size: .9rem; line-height: 1.15; font-weight: 700; color: #d9b26a; word-wrap: break-word; }
+#pText { margin-top: .16rem; font-size: .58rem; line-height: 1.2; color: #f3eee2; word-wrap: break-word; }
+#qrBox { box-sizing: border-box; margin: .24rem auto 0; width: 4.2rem; height: 4.2rem; padding: .12rem; background: #fff; border: .05rem solid #d9b26a; }
+#qrBox img { display: block; width: 100%; height: 100%; }
+#pNote { margin-top: .16rem; font-size: .4rem; line-height: 1.2; color: #f3eee2; }
+#pClock { margin-top: .4rem; font-size: 2.4rem; line-height: 1.1; font-weight: 700; color: #d9b26a; }
+
+/* Summary */
+#sumBox { position: absolute; left: .4rem; top: .3rem; width: 8.6rem; height: 5.4rem; }
+#sumLabel { font-size: .42rem; color: #a9bfb7; }
+#sumPromptBox { height: 2.7rem; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; overflow: hidden; }
+#sumPrompt { font-weight: 700; color: #d9b26a; line-height: 1.1; word-wrap: break-word; max-width: 100%; }
+#sumResult { font-size: .62rem; line-height: 1.2; font-weight: 700; color: #f3eee2; word-wrap: break-word; }
+#sumNext { position: absolute; left: .5rem; right: .5rem; top: 6.1rem; height: 2.4rem; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; font-size: .6rem; font-weight: 700; color: #f3eee2; white-space: nowrap; overflow: hidden; }
+
+#reconnect { position: absolute; left: 0; right: 0; bottom: 0; padding: .14rem; text-align: center; background: #000; color: #d9b26a; font-size: .44rem; }
+
+</style>
+</head>
+<body>
+<div id="stage" class="full">
+  <div id="paperBox"><svg id="paper" viewBox="0 0 1280 720" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"></svg></div>
+  <div id="pauseBanner" class="hidden">Paused. Press Up to carry on.</div>
+
+  <div id="side">
+    <div id="timer">60</div>
+    <div id="teamLabel">Drawing for</div>
+    <div id="teamName"></div>
+    <div id="drawerLine"></div>
+    <div id="roundLine"></div>
+  </div>
+
+  <div id="foot">
+    <div id="footText"></div>
+    <div id="footSub"></div>
+    <div id="stealRow" class="hidden"></div>
+  </div>
+
+  <div id="panel">
+    <div id="pTitle"></div>
+    <div id="pText"></div>
+    <div id="qrBox"><img id="qr" alt=""></div>
+    <div id="pNote"></div>
+    <div id="pClock" class="hidden"></div>
+  </div>
+
+  <div id="sumBox">
+    <div id="sumLabel">The word was</div>
+    <div id="sumPromptBox"><div id="sumPrompt"></div></div>
+    <div id="sumResult"></div>
+  </div>
+  <div id="sumNext"></div>
+
+  <div id="scores"></div>
+  <div id="reconnect" class="hidden">Reconnecting...</div>
+</div>
+
+<script src="/shared/hub-client.js"></script>
+<script>
+(function () {
+  var APP = 'pictionary';
+  var BASE = '/api/app/' + APP + '/';
+  var POLL_MS = 500;
+  var STROKE_MS = 300;
+  var FAIL_LIMIT = 3;
+  var PAGE_DEAD_MS = 20000;
+  /* A press meant for Got it that lands just after time is up must not award a steal or skip the summary. */
+  var OK_GUARD_MS = 1200;
+  var COLOURS = { black: '#1c1512', red: '#d3201a', blue: '#1257c4', green: '#12812f', orange: '#f07a00', purple: '#7b1fa2' };
+  var LINE = { 1: 7, 2: 14, 3: 28 };
+  var PAPER = '#f3eee2';
+  var W = 1280, H = 720;
+
+  function $(id) { return document.getElementById(id); }
+  function now() { return new Date().getTime(); }
+  function setText(el, text) {
+    if (el.__text !== text) { el.__text = text; el.textContent = text; }
+  }
+  function show(id, on) {
+    var el = $(id);
+    el.className = el.className.replace(/(^| )hidden( |$)/, ' ').replace(/^ +| +$/g, '');
+    if (!on) { el.className = el.className ? el.className + ' hidden' : 'hidden'; }
+  }
+  function fit() {
+    var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    if (s > 0) { document.documentElement.style.fontSize = (100 * s) + 'px'; }
+    lastPromptFit = '';
+  }
+
+  function request(method, url, body, done) {
+    var xhr = new XMLHttpRequest();
+    var finished = false;
+    function finish(data) {
+      if (finished) { return; }
+      finished = true;
+      try { done(data); } catch (e) { if (window.console) { console.log(e); } }
+    }
+    try {
+      xhr.open(method, url, true);
+      xhr.timeout = 4000;
+      if (body) { xhr.setRequestHeader('Content-Type', 'application/json'); }
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState !== 4) { return; }
+        var data = null;
+        if (xhr.status === 200) {
+          try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+        }
+        finish(data);
+      };
+      xhr.ontimeout = function () { finish(null); };
+      xhr.onerror = function () { finish(null); };
+      xhr.send(body ? JSON.stringify(body) : null);
+    } catch (e) {
+      finish(null);
+    }
+  }
+
+  // --- sound: optional. A TV with no working audio simply stays quiet. ---
+  var audio = null, audioFailed = false;
+  function tone(freq, start, length, type, gain) {
+    if (audioFailed) { return; }
+    try {
+      if (!audio) {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) { audioFailed = true; return; }
+        audio = new AC();
+      }
+      if (audio.state === 'suspended' && audio.resume) {
+        var p = audio.resume();
+        if (p && p['catch']) { p['catch'](function () {}); }
+      }
+      var t = audio.currentTime + start;
+      var o = audio.createOscillator(), g = audio.createGain();
+      o.type = type || 'sine';
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(gain || 0.25, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + length);
+      o.connect(g);
+      g.connect(audio.destination);
+      o.start(t);
+      o.stop(t + length);
+    } catch (e) {
+      audioFailed = true;
+    }
+  }
+  function chime() { tone(660, 0, 0.25); tone(880, 0.15, 0.25); tone(1320, 0.3, 0.45); }
+  function beep() { tone(880, 0, 0.14, 'square', 0.15); }
+  function buzzer() { tone(160, 0, 0.8, 'sawtooth', 0.3); }
+
+  // --- the drawing ---
+  // SVG, not canvas: on WebView 66 on the virtual TV a canvas held the ink but never showed it on screen. The wheels' SVG
+  // always shows, and one path per stroke is light even for the largest drawing allowed.
+  var paper = $('paper');
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+  var since = 0;
+  var pathById = {};
+  var strokesBusy = false;
+  var strokesAt = 0;
+  window.__picPainted = 0;
+  window.__picPaintedAt = 0;
+
+  function wipe() {
+    while (paper.firstChild) { paper.removeChild(paper.firstChild); }
+    pathById = {};
+  }
+
+  function paint(s) {
+    var pts = s.points;
+    if (!pts || pts.length < 2) { return; }
+    var el = s.from > 0 ? pathById[s.id] : null;
+    var d = el ? el.getAttribute('d') : '';
+    var part = [];
+    for (var i = 0; i < pts.length; i += 2) {
+      var x = Math.round(pts[i] * W / 100) / 10, y = Math.round(pts[i + 1] * H / 100) / 10;
+      part.push((i === 0 && !el ? 'M' : 'L') + x + ' ' + y);
+    }
+    // A zero-length line with round caps draws the dot from a single tap.
+    if (!el && pts.length === 2) { part.push('l.01 0'); }
+    if (!el) {
+      el = document.createElementNS(SVG_NS, 'path');
+      el.setAttribute('fill', 'none');
+      el.setAttribute('stroke', COLOURS[s.color] || COLOURS.black);
+      el.setAttribute('stroke-width', LINE[s.size] || LINE[2]);
+      el.setAttribute('stroke-linecap', 'round');
+      el.setAttribute('stroke-linejoin', 'round');
+      paper.appendChild(el);
+      pathById[s.id] = el;
+    }
+    el.setAttribute('d', d + part.join(''));
+    window.__picPainted += pts.length / 2;
+    window.__picPaintedAt = now();
+  }
+
+  function pollStrokes() {
+    if (strokesBusy) { return; }
+    if (now() - strokesAt < STROKE_MS - 20) { return; }
+    strokesAt = now();
+    strokesBusy = true;
+    request('GET', BASE + 'strokes?since=' + since, null, function (r) {
+      strokesBusy = false;
+      if (!r) { return; }
+      if (r.reset) { wipe(); }
+      for (var i = 0; i < r.strokes.length; i++) { paint(r.strokes[i]); }
+      since = r.version;
+    });
+  }
+
+  // --- screen ---
+  var st = null;
+  var lastPhase = null, lastSecond = -1, phaseAt = 0;
+  var lastPromptFit = '';
+  var stealFocus = 0;
+  var stealChoices = [];
+
+  function otherTeams() {
+    var out = [];
+    for (var i = 0; i < st.teams.length; i++) {
+      if (st.teams[i].id !== st.currentTeamId) { out.push({ id: st.teams[i].id, name: st.teams[i].name }); }
+    }
+    out.push({ id: 'none', name: 'No one' });
+    return out;
+  }
+
+  function renderScores() {
+    var box = $('scores');
+    var key = '';
+    var i;
+    for (i = 0; i < st.teams.length; i++) { key += st.teams[i].id + '|' + st.teams[i].name + '|' + st.teams[i].score + '|'; }
+    key += st.currentTeamId;
+    if (box.__key === key) { return; }
+    box.__key = key;
+    while (box.firstChild) { box.removeChild(box.firstChild); }
+    for (i = 0; i < st.teams.length; i++) {
+      var t = st.teams[i];
+      var d = document.createElement('div');
+      d.className = t.id === st.currentTeamId ? 'score cur' : 'score';
+      var n = document.createElement('span');
+      n.className = 'sName';
+      n.textContent = t.name;
+      var v = document.createElement('span');
+      v.className = 'sVal';
+      v.textContent = String(t.score);
+      d.appendChild(n);
+      d.appendChild(v);
+      box.appendChild(d);
+    }
+  }
+
+  function renderSteal() {
+    var row = $('stealRow');
+    var choices = otherTeams();
+    var key = JSON.stringify(choices);
+    if (row.__key !== key) {
+      row.__key = key;
+      stealChoices = choices;
+      stealFocus = 0;
+      while (row.firstChild) { row.removeChild(row.firstChild); }
+      for (var i = 0; i < choices.length; i++) {
+        var d = document.createElement('div');
+        d.textContent = choices[i].name;
+        row.appendChild(d);
+      }
+    }
+    for (var j = 0; j < row.childNodes.length; j++) {
+      row.childNodes[j].className = j === stealFocus ? 'pick focus' : 'pick';
+    }
+  }
+
+  function fitPrompt(text) {
+    var key = text;
+    if (lastPromptFit === key) { return; }
+    var el = $('sumPrompt'), box = $('sumPromptBox');
+    if (box.clientHeight <= 0) { return; }
+    lastPromptFit = key;
+    setText(el, text);
+    var size = 1.5;
+    while (size > .5) {
+      el.style.fontSize = size + 'rem';
+      if (el.offsetHeight <= box.clientHeight && el.scrollWidth <= box.clientWidth + 1) { return; }
+      size = Math.round((size - .05) * 100) / 100;
+    }
+  }
+
+  function render() {
+    var phase = st.phase;
+    var from = phase === 'paused' ? st.pausedFrom : phase;
+    var layout = phase === 'summary' ? 'sum' : (from === 'drawing' || from === 'steal') ? 'draw' : 'full';
+    if ($('stage').className !== layout) { $('stage').className = layout; lastPromptFit = ''; }
+
+    show('side', layout === 'draw');
+    show('foot', layout === 'draw');
+    show('panel', layout === 'full');
+    show('sumBox', layout === 'sum');
+    show('sumNext', layout === 'sum');
+    show('pauseBanner', phase === 'paused' && layout === 'draw');
+    show('qrBox', from === 'ready');
+    show('pClock', from === 'claimed');
+    renderScores();
+
+    if (from === 'ready') {
+      setText($('pTitle'), st.currentTeamName + ', your turn');
+      setText($('pText'), 'Pick someone to draw, and scan to draw on your phone');
+      setText($('pNote'), 'Drawing needs a phone. Keep the word secret, and tap "I\'ll draw" on the phone.');
+    } else if (from === 'claimed') {
+      setText($('pTitle'), (st.drawerName || 'Your artist') + ' is reading the prompt');
+      setText($('pText'), phase === 'paused' ? 'Paused. Press Up to carry on.' : st.currentTeamName + ', get ready to guess out loud');
+      setText($('pNote'), 'The drawing starts when they tap Start.');
+      setText($('pClock'), String(st.secondsLeft));
+    }
+
+    if (layout === 'draw') {
+      setText($('timer'), String(st.secondsLeft));
+      var hot = st.secondsLeft <= 10;
+      $('timer').className = hot ? 'hot' : '';
+      setText($('teamLabel'), from === 'steal' ? 'Steal from' : 'Drawing for');
+      setText($('teamName'), st.currentTeamName);
+      setText($('drawerLine'), st.drawerName ? 'Artist: ' + st.drawerName : '');
+      setText($('roundLine'), 'Round ' + st.round);
+      show('stealRow', from === 'steal');
+      if (from === 'steal') {
+        renderSteal();
+        setText($('footText'), 'Other teams: shout your guess!');
+        setText($('footSub'), '');
+      } else {
+        setText($('footText'), 'Your team guesses out loud');
+        setText($('footSub'), 'OK = Got it. Up = Pause.');
+        $('footSub').style.marginLeft = '.6rem';
+      }
+    }
+
+    if (layout === 'sum') {
+      fitPrompt(st.prompt || '');
+      var result;
+      if (st.outcome === 'guessed') { result = st.scoredTeamName + ' got it: +' + st.points; }
+      else if (st.outcome === 'stolen') { result = st.scoredTeamName + ' stole it: +' + st.points; }
+      else { result = 'No one got it'; }
+      setText($('sumResult'), result + (st.hard ? ' (hard word)' : ''));
+      setText($('sumNext'), 'Next: ' + st.nextTeamName + '. Press OK.');
+    }
+  }
+
+  function sounds(prev) {
+    if (st.phase !== prev) {
+      if (st.phase === 'steal' && prev === 'drawing') { buzzer(); }
+      if (st.phase === 'summary' && st.points > 0) { chime(); }
+      if (st.phase === 'summary' && st.points === 0 && prev === 'steal') { buzzer(); }
+      if (st.phase === 'drawing' && prev === 'claimed') { chime(); }
+    }
+    if (st.phase === 'drawing' && st.secondsLeft <= 5 && st.secondsLeft > 0 && st.secondsLeft !== lastSecond) { beep(); }
+    lastSecond = st.secondsLeft;
+  }
+
+  function apply(s) {
+    var prev = lastPhase;
+    st = s;
+    if (s.phase !== prev) { phaseAt = now(); }
+    lastPhase = s.phase;
+    if (prev !== null) { sounds(prev); }
+    render();
+    tickStrokes();
+  }
+
+  function tickStrokes() {
+    if (!st) { return; }
+    if (st.phase === 'drawing' || st.strokeVersion !== since) { pollStrokes(); }
+  }
+
+  // --- polling ---
+  var fails = 0, lastPollAt = now(), stateBusy = false;
+  function pollState() {
+    if (stateBusy) { return; }
+    stateBusy = true;
+    request('GET', BASE + 'state', null, function (s) {
+      stateBusy = false;
+      if (!s) {
+        fails++;
+        if (fails >= FAIL_LIMIT) { show('reconnect', true); }
+        return;
+      }
+      fails = 0; if (window.HubClient && HubClient.ready) { HubClient.ready(); }
+      lastPollAt = now();
+      show('reconnect', false);
+      apply(s);
+    });
+  }
+
+  function act(body) {
+    request('POST', BASE + 'action', body, function (s) {
+      if (s) { apply(s); } else { pollState(); }
+    });
+  }
+
+  // --- remote ---
+  function onKey(name) {
+    if (!st) { return; }
+    var phase = st.phase;
+    var guarded = now() - phaseAt < OK_GUARD_MS;
+    if (name === 'up') {
+      if (phase === 'paused') { act({ action: 'resume' }); }
+      else if (phase === 'claimed' || phase === 'drawing' || phase === 'steal') { act({ action: 'pause' }); }
+      return;
+    }
+    if (phase === 'steal' && (name === 'left' || name === 'right')) {
+      if (stealChoices.length) {
+        stealFocus = (stealFocus + (name === 'right' ? 1 : stealChoices.length - 1)) % stealChoices.length;
+        render();
+      }
+      return;
+    }
+    if (name !== 'ok') { return; }
+    if (phase === 'drawing') { act({ action: 'got_it', promptId: st.promptId }); }
+    else if (phase === 'paused') { act({ action: 'resume' }); }
+    else if (phase === 'steal' && !guarded && stealChoices[stealFocus]) { act({ action: 'steal', teamId: stealChoices[stealFocus].id }); }
+    else if (phase === 'summary' && !guarded) { act({ action: 'next_turn' }); }
+  }
+
+  window.onRemoteKey = function (name) {
+    try { onKey(name); } catch (e) { if (window.console) { console.log(e); } }
+  };
+  var KEYS = { 37: 'left', 38: 'up', 39: 'right', 40: 'down', 13: 'ok' };
+  document.onkeydown = function (e) {
+    var name = KEYS[e.keyCode];
+    if (name) {
+      if (e.preventDefault) { e.preventDefault(); }
+      window.onRemoteKey(name);
+    } else if (e.keyCode === 27 && window.HubClient) {
+      HubClient.home();
+    }
+  };
+
+  // --- start ---
+  wipe();
+  $('qr').src = '/qr.svg';
+  fit();
+  window.addEventListener('resize', fit);
+  if (window.HubClient) {
+    try { HubClient.start({ kind: 'tv', app: APP }); } catch (e) { if (window.console) { console.log(e); } }
+  }
+  setInterval(function () { try { pollState(); } catch (e) { stateBusy = false; } }, POLL_MS);
+  setInterval(function () { try { tickStrokes(); } catch (e) { strokesBusy = false; } }, STROKE_MS);
+  setInterval(function () { if (now() - lastPollAt > PAGE_DEAD_MS) { window.location.reload(); } }, 5000);
+  pollState();
+})();
+</script>
+</body>
+</html>

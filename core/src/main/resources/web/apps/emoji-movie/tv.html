@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Guess the Bollywood</title>
+<style>
+html { background: #0c201b; }
+/* Hold the screen back until its first real data has been drawn, so a half-built screen never flashes up.
+   The animation is only a fallback: if no data arrives, the screen shows itself after 2.5 s anyway. */
+body { opacity: 0; -webkit-animation: ptvShow 0s 2.5s forwards; animation: ptvShow 0s 2.5s forwards; }
+body.ptv-ready { opacity: 1; -webkit-animation: none; animation: none; }
+@-webkit-keyframes ptvShow { to { opacity: 1; } } @keyframes ptvShow { to { opacity: 1; } }
+
+/* Shared by Lost in Translation and Emoji Movie. 1rem is 100px at 1920x1080. The clue is the one bold thing. */
+html, body { margin: 0; height: 100%; overflow: hidden; background: #0c201b; color: #f3eee2; font-family: Roboto, "Noto Sans", "Segoe UI", Arial, sans-serif; }
+.hidden { display: none !important; }
+#top { position: absolute; left: .6rem; right: .6rem; top: .35rem; height: .9rem; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
+#name { font-family: Georgia, "Noto Serif", "Droid Serif", serif; font-size: .6rem; font-weight: 700; color: #d9b26a; }
+#qno { margin-left: .4rem; font-size: .36rem; color: #a9bfb7; }
+#clock { margin-left: auto; font-size: .95rem; font-weight: 700; color: #f3eee2; }
+#clock.low { color: #e8806a; }
+#dots { margin-left: .4rem; }
+#dots i { display: inline-block; width: .2rem; height: .2rem; border-radius: 50%; margin-left: .08rem; background: #2f5c52; }
+#dots i.on { background: #d9b26a; }
+#stage { position: absolute; left: .9rem; right: .9rem; top: 1.35rem; bottom: 1.75rem; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column;
+  -webkit-justify-content: center; justify-content: center; text-align: center; }
+#main { font-family: Georgia, "Noto Serif", "Droid Serif", serif; font-size: 1.05rem; line-height: 1.22; color: #f3eee2; }
+#main.emoji { font-family: "Noto Color Emoji", "Segoe UI Emoji", sans-serif; font-size: 2.1rem; line-height: 1.2; }
+#main.answer { font-size: 1.3rem; font-weight: 700; color: #d9b26a; }
+#extra { margin-top: .35rem; }
+#extra div { margin-top: .12rem; font-size: .5rem; line-height: 1.3; color: #a9bfb7; }
+#extra div.line { font-family: Georgia, "Noto Serif", "Droid Serif", serif; font-size: .74rem; color: #f3eee2; }
+#hint { position: absolute; left: .6rem; right: .6rem; bottom: 1.28rem; text-align: center; font-size: .36rem; color: #a9bfb7; }
+#buzz { margin-top: .4rem; display: inline-block; align-self: center; -webkit-align-self: center; padding: .14rem .5rem; background: #d9b26a; color: #0c201b; font-size: .66rem; font-weight: 700; }
+#scores { position: absolute; left: .6rem; right: 2rem; bottom: .3rem; height: .85rem; display: -webkit-flex; display: flex; }
+.team { -webkit-flex: 1; flex: 1; margin-right: .16rem; padding: .08rem .24rem; background: #143630; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; overflow: hidden; }
+.team.sel { background: #d9b26a; color: #0c201b; }
+.team b { margin-left: auto; font-size: .56rem; }
+.team span { font-size: .4rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#qrBox { position: absolute; right: .35rem; bottom: .25rem; width: 1.3rem; height: 1.3rem; box-sizing: border-box; padding: .06rem; background: #fff; }
+#qrBox img { display: block; width: 100%; height: 100%; }
+#bonus { position: absolute; left: 50%; top: 1.2rem; width: 6rem; margin-left: -3rem; padding: .12rem; text-align: center; background: #d9b26a; color: #0c201b; font-size: .5rem; font-weight: 700; }
+#reconnect { position: absolute; left: 0; right: 0; bottom: 0; padding: .14rem; text-align: center; background: #000; color: #d9b26a; font-size: .42rem; }
+
+</style>
+</head>
+<body>
+<div id="top"><div id="name"></div><div id="qno"></div><div id="dots"></div><div id="clock"></div></div>
+<div id="stage"><div id="main"></div><div id="extra"></div><div id="buzz" class="hidden"></div></div>
+<div id="hint"></div>
+<div id="scores"></div>
+<div id="qrBox"><img id="qr" alt=""></div>
+<div id="bonus" class="hidden">Streak bonus: +2</div>
+<div id="reconnect" class="hidden">Reconnecting...</div>
+<script src="/shared/hub-client.js"></script>
+<script>
+(function () {
+  var APP = location.pathname.split('/').pop();
+  var API = '/api/app/' + APP + '/';
+  var TITLES = { 'english-song': 'Lost in Translation', 'emoji-movie': 'Emoji Movie' };
+  function $(id) { return document.getElementById(id); }
+  function show(id, on) { $(id).className = ($(id).className.replace(/ ?hidden/g, '') + (on ? '' : ' hidden')).replace(/^ /, ''); }
+  function setText(id, t) { var e = $(id); if (e.__t !== t) { e.__t = t; e.textContent = t; } }
+  function fit() { var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080); if (s > 0) { document.documentElement.style.fontSize = (100 * s) + 'px'; } }
+  window.onresize = fit; fit();
+  setText('name', TITLES[APP] || 'Guess');
+  document.title = TITLES[APP] || 'Guess';
+
+  var state = null, fails = 0, lastPollAt = new Date().getTime(), selected = 0, lastBonus = null, lastBuzz = null, lastClue = 0, lastSec = -1, audio = null;
+
+  function req(method, path, body, done) {
+    var x = new XMLHttpRequest(), ended = false;
+    function end(d) { if (!ended) { ended = true; if (done) { done(d); } } }
+    try {
+      x.open(method, API + path, true); x.timeout = 3000;
+      x.onreadystatechange = function () { if (x.readyState !== 4) { return; } var d = null; if (x.status === 200) { try { d = JSON.parse(x.responseText); } catch (e) { d = null; } } end(d); };
+      x.ontimeout = function () { end(null); }; x.onerror = function () { end(null); };
+      x.send(body ? JSON.stringify(body) : null);
+    } catch (e) { end(null); }
+  }
+  function act(a, extra) {
+    var b = { action: a }, k;
+    if (state && state.questionId) { b.questionId = String(state.questionId); }
+    if (extra) { for (k in extra) { if (extra.hasOwnProperty(k)) { b[k] = extra[k]; } } }
+    req('POST', 'action', b, function () { poll(true); });
+  }
+  function tone(freq, ms) {
+    try {
+      var C = window.AudioContext || window.webkitAudioContext; if (!C) { return; }
+      audio = audio || new C(); var o = audio.createOscillator(), g = audio.createGain();
+      o.frequency.value = freq; g.gain.value = 0.15; o.connect(g); g.connect(audio.destination); o.start(); o.stop(audio.currentTime + ms / 1000);
+    } catch (e) { /* Sound is a bonus. */ }
+  }
+  function clearBox(e) { while (e.firstChild) { e.removeChild(e.firstChild); } }
+  function addExtra(text, cls) { var d = document.createElement('div'); d.textContent = text; if (cls) { d.className = cls; } $('extra').appendChild(d); }
+
+  function draw(s) {
+    var phase = s.phase, sec = s.secondsLeft, live = phase === 'question' || phase === 'buzzed';
+    // Clock and clue dots
+    setText('clock', live ? String(sec) : '');
+    $('clock').className = live && sec <= 10 ? 'low' : '';
+    setText('qno', s.questionNumber > 0 ? 'Question ' + s.questionNumber : '');
+    var dots = ''; if (live) { for (var i = 1; i <= s.cluesTotal; i++) { dots += i <= s.clue ? '<i class="on"></i>' : '<i></i>'; } }
+    if ($('dots').__d !== dots) { $('dots').__d = dots; $('dots').innerHTML = dots; }
+    // Sounds
+    if (phase === 'buzzed' && lastBuzz !== s.buzzSeq) { tone(880, 250); }
+    lastBuzz = s.buzzSeq;
+    if (live && sec !== lastSec && sec <= 5 && sec > 0 && phase === 'question') { tone(660, 90); }
+    lastSec = sec;
+    if (lastBonus !== null && s.bonusSeq > lastBonus) { show('bonus', true); tone(1040, 300); setTimeout(function () { show('bonus', false); }, 3500); }
+    lastBonus = s.bonusSeq;
+
+    // Centre
+    var main = $('main'), key = phase + '|' + s.questionId + '|' + s.clue + '|' + s.canAward + '|' + (s.song && s.song.status) + '|' + (s.winners || []).join();
+    if (main.__key !== key) {
+      main.__key = key; clearBox($('extra')); main.className = '';
+      if (phase === 'ready') {
+        main.textContent = APP === 'emoji-movie' ? 'Guess the movie from the emojis' : 'Guess the song from its English lyrics';
+      } else if (live) {
+        var c = s.clues || [], lead = c[0] || {};
+        main.textContent = lead.text || '';
+        if (lead.kind === 'emoji') { main.className = 'emoji'; }
+        for (var n = 1; n < c.length; n++) { addExtra(c[n].text, c[n].kind === 'line' ? 'line' : ''); }
+      } else if (phase === 'reveal') {
+        var r = s.reveal || {};
+        main.className = 'answer'; main.textContent = r.answer || '';
+        if (r.lines && r.lines[0]) { addExtra('"' + r.lines[0] + '"', 'line'); }
+        if (r.emojis) { addExtra(r.emojis); }
+        var info = []; if (r.movie && r.movie !== r.answer) { info.push(r.movie); } if (r.singer) { info.push(r.singer); } if (r.lead) { info.push(r.lead); } if (r.year) { info.push(String(r.year)); }
+        if (info.length) { addExtra(info.join(', ')); }
+        if (s.song && s.song.status === 'playing') { addExtra('Now playing the song. Sing along!'); }
+      } else if (phase === 'final') {
+        main.className = 'answer';
+        main.textContent = s.winners && s.winners.length ? s.winners.join(' and ') + ' won!' : 'Thanks for playing!';
+      }
+    }
+    if (phase === 'buzzed') { setText('buzz', s.buzzTeamName + ' buzzed!'); }
+    show('buzz', phase === 'buzzed');
+
+    // What to do next
+    var hint = '';
+    if (phase === 'ready') { hint = s.hasHost ? 'Host: tap Start on your phone. Or press OK on the remote.' : 'Scan the code to buzz from your phone, or shout your answer. Press OK to start.'; }
+    else if (phase === 'question') { hint = (s.steal ? 'Steal! ' : '') + 'Worth ' + s.worth + ' points. Buzz or shout it out. OK: next clue. Down: show the answer.'; }
+    else if (phase === 'buzzed') { hint = s.hasHost ? 'Host decides on the phone.' : 'OK: show the answer'; }
+    else if (phase === 'reveal') { hint = s.canAward ? 'Left and right pick the team, OK gives ' + s.awardPoints + ' points, Down: no one' : 'OK: next question. Up: end the game.'; }
+    else if (phase === 'final') { hint = 'OK: play again'; }
+    setText('hint', hint);
+
+    // Scores
+    var teams = s.teams || [], sel = phase === 'reveal' && s.canAward;
+    if (selected >= teams.length) { selected = 0; }
+    var box = $('scores'), sk = JSON.stringify(teams) + sel + selected;
+    if (box.__k !== sk) {
+      box.__k = sk; clearBox(box);
+      for (var t = 0; t < teams.length; t++) {
+        var d = document.createElement('div'); d.className = 'team' + (sel && t === selected ? ' sel' : '');
+        var a = document.createElement('span'); a.textContent = teams[t].name;
+        var b = document.createElement('b'); b.textContent = String(teams[t].score);
+        d.appendChild(a); d.appendChild(b); box.appendChild(d);
+      }
+    }
+  }
+
+  function poll(once) {
+    req('GET', 'state', null, function (d) {
+      lastPollAt = new Date().getTime();
+      try {
+        if (d) { fails = 0; state = d; draw(d); if (window.HubClient && HubClient.ready) { HubClient.ready(); } } else { fails++; }
+        show('reconnect', fails >= 2);
+      } catch (e) { if (window.console) { console.log('Draw error: ' + e); } }
+      if (!once) { setTimeout(poll, 500); }
+    });
+  }
+
+  function key(name) {
+    if (!state) { return; }
+    var p = state.phase, teams = state.teams || [];
+    if (p === 'ready') { if (name === 'ok') { act('start_question'); } }
+    else if (p === 'question') { if (name === 'ok') { if (state.clue < state.cluesTotal) { act('next_clue', { clue: String(state.clue) }); } else { act('reveal'); } } else if (name === 'down') { act('reveal'); } }
+    else if (p === 'buzzed') { if (name === 'ok' || name === 'down') { act('reveal'); } }
+    else if (p === 'reveal') {
+      if (state.canAward) {
+        if (name === 'left') { selected = (selected + teams.length - 1) % teams.length; draw(state); }
+        else if (name === 'right') { selected = (selected + 1) % teams.length; draw(state); }
+        else if (name === 'ok' && teams[selected]) { act('award', { teamId: teams[selected].id }); }
+        else if (name === 'down') { act('next_question'); }
+      } else if (name === 'ok') { act('next_question'); } else if (name === 'up') { act('end_game'); }
+    } else if (p === 'final' && name === 'ok') { act('reset_game'); }
+  }
+  window.onRemoteKey = key;
+  document.addEventListener('keydown', function (e) {
+    var m = { 13: 'ok', 37: 'left', 38: 'up', 39: 'right', 40: 'down' }[e.keyCode];
+    if (m) { key(m); }
+  });
+
+  try { $('qr').src = '/qr.svg'; } catch (e) { /* Page still works. */ }
+  try { HubClient.start({ kind: 'tv', app: APP }); } catch (e) { /* Page still works. */ }
+  poll();
+  // A poll always ends within seconds, so a long silence means the page has stopped. There is no refresh on a TV.
+  setInterval(function () { if (new Date().getTime() - lastPollAt > 20000) { location.reload(); } }, 5000);
+})();
+</script>
+</body>
+</html>

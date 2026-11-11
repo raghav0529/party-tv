@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0c201b">
+<title>Accent Wheel</title>
+<style>
+/* Design tokens. Same in all three game pages. Gold marks only the one thing to do next. */
+:root {
+  --bg: #0c201b; --surface: #143630; --line: #2f5c52; --ink: #f3eee2; --muted: #a9bfb7; --gold: #d9b26a;
+  --alert: #e8806a;
+  --s1: 8px; --s2: 16px; --s3: 24px;
+  --t1: 16px; --t2: 20px; --t3: 28px; --t4: 44px;
+  /* The film-title voice: names and big moments only. Controls stay in the plain sans. */
+  --display: Georgia, "Noto Serif", "Droid Serif", "Noto Serif Devanagari", serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; overflow-anchor: none; }
+body { background: var(--bg); color: var(--ink); font-family: -apple-system, "Roboto", "Noto Sans", "Noto Sans Devanagari", "Droid Sans", "Segoe UI", "Mangal", Arial, sans-serif; font-size: var(--t2); line-height: 1.3; -webkit-text-size-adjust: 100%; word-wrap: break-word; overflow-wrap: break-word; }
+.hidden { display: none !important; }
+button { min-height: 56px; padding: var(--s1) var(--s2); border: 1px solid var(--line); border-radius: 12px; background: transparent; color: var(--ink); font: inherit; font-size: var(--t1); font-weight: 600; cursor: pointer; -webkit-appearance: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+button:active { background: var(--surface); }
+button.primary { min-height: 72px; border-radius: 16px; border-color: var(--gold); background: var(--gold); color: var(--bg); font-size: var(--t3); font-weight: 800; }
+button.primary:active { background: var(--ink); border-color: var(--ink); }
+button.quiet { border-color: transparent; color: var(--muted); font-weight: 500; }
+button.chosen { border-color: var(--gold); color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }
+button[disabled] { opacity: .45; cursor: default; }
+button.primary[disabled] { opacity: 1; background: var(--surface); border-color: var(--line); color: var(--muted); }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+input, select { width: 100%; min-width: 0; min-height: 56px; padding: var(--s1) var(--s2); border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); font: inherit; font-size: var(--t1); -webkit-appearance: none; }
+input::placeholder { color: var(--muted); opacity: 1; }
+input:focus { border-color: var(--gold); outline: none; }
+.wide { display: block; width: 100%; }
+.page { display: flex; flex-direction: column; gap: var(--s3); max-width: 640px; margin: 0 auto; padding: var(--s1) var(--s2) var(--s3); }
+.page.withBar { padding-bottom: 112px; }
+.head { display: flex; align-items: center; gap: var(--s1); }
+.head h1 { flex: 1 1 auto; min-width: 0; margin: 0; font-family: var(--display); font-size: var(--t2); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.head button { flex: 0 0 auto; padding: var(--s1); }
+.group { display: flex; flex-direction: column; gap: var(--s1); }
+h2 { margin: 0; color: var(--muted); font-size: var(--t1); font-weight: 600; }
+.pill { align-self: flex-start; padding: 4px 12px; border-radius: 99px; background: var(--surface); color: var(--muted); font-size: var(--t1); font-weight: 600; }
+.pill.live { background: var(--ink); color: var(--bg); }
+.title { font-family: var(--display); font-size: var(--t3); font-weight: 700; line-height: 1.15; }
+.sub { color: var(--muted); font-size: var(--t1); }
+.bigClock { font-size: var(--t4); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.low { color: var(--alert); }
+/* Score strip */
+.strip { display: flex; gap: var(--s2); }
+.tile { flex: 1 1 0; min-width: 0; display: flex; align-items: baseline; justify-content: space-between; gap: var(--s1); padding: var(--s1) 0; border-bottom: 2px solid var(--line); color: var(--muted); font-size: var(--t1); }
+.tile .n { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile b { flex: 0 0 auto; color: var(--ink); font-size: var(--t2); font-variant-numeric: tabular-nums; }
+.tile.cur { border-bottom-color: var(--gold); color: var(--ink); font-weight: 700; }
+/* Rows */
+.row { display: flex; align-items: center; gap: var(--s1); min-height: 56px; }
+.row .grow { flex: 1 1 auto; min-width: 0; }
+.x { flex: 0 0 56px; width: 56px; padding: 0; border-color: transparent; background: none; color: var(--muted); font-size: var(--t2); font-weight: 500; }
+.add { display: flex; gap: var(--s1); }
+.add input { flex: 1 1 auto; }
+.add button { flex: 0 0 auto; }
+.btnRow { display: flex; gap: var(--s1); }
+.btnRow button { flex: 1 1 0; min-width: 0; padding-left: var(--s1); padding-right: var(--s1); }
+/* Settings */
+#settings { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 8; overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; background: var(--bg); }
+.how { margin: 0; padding-left: var(--s3); font-size: var(--t1); color: var(--muted); }
+.how li + li { margin-top: var(--s1); }
+.err { padding: var(--s1) 12px; border: 1px solid var(--alert); border-radius: 12px; color: var(--ink); font-size: var(--t1); }
+/* Always on screen */
+#bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 3; padding: var(--s1) var(--s2) var(--s2); background: var(--bg); }
+#bar.typing { display: none; }
+#mainBtn { display: block; width: 100%; max-width: 608px; margin: 0 auto; line-height: 1.1; }
+#banner { position: fixed; top: 0; left: 0; right: 0; z-index: 10; padding: var(--s1) var(--s2); background: var(--ink); color: var(--bg); font-size: var(--t1); font-weight: 700; text-align: center; }
+#toast { position: fixed; left: var(--s2); right: var(--s2); bottom: 104px; z-index: 10; max-width: 480px; margin: 0 auto; padding: var(--s2); border-radius: 12px; background: var(--ink); color: var(--bg); font-size: var(--t1); font-weight: 700; }
+#toast.bad { background: var(--surface); border: 1px solid var(--alert); color: var(--ink); }
+#modal { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 20; padding: var(--s2); background: rgba(0, 0, 0, .8); }
+#modalBox { display: flex; flex-direction: column; gap: var(--s2); max-width: 460px; margin: 64px auto 0; padding: var(--s3) var(--s2) var(--s2); border-radius: 16px; background: var(--surface); }
+#modalText { margin: 0; font-size: var(--t2); }
+#modalRow { display: flex; gap: var(--s1); }
+#modalRow button { flex: 1 1 0; min-width: 0; min-height: 56px; font-size: var(--t1); font-weight: 700; }
+
+.status { display: flex; align-items: center; gap: var(--s1); flex-wrap: wrap; }
+#speedTag { background: var(--ink); color: var(--bg); }
+#award { color: var(--muted); font-size: var(--t1); }
+#resultBox { display: flex; flex-direction: column; gap: var(--s2); padding: var(--s2) 0; }
+.result-label { color: var(--muted); font-size: var(--t1); }
+.result-text { font-family: var(--display); font-size: var(--t3); font-weight: 700; line-height: 1.15; }
+#scorePanel { display: flex; flex-direction: column; gap: var(--s2); }
+.points { display: flex; gap: var(--s1); }
+.points button { flex: 1 1 0; min-width: 0; min-height: 72px; padding: 0; font-size: var(--t3); font-weight: 800; font-variant-numeric: tabular-nums; }
+.points button.chosen { background: var(--gold); border-color: var(--gold); color: var(--bg); box-shadow: none; }
+.toggles { display: flex; gap: var(--s1); }
+.toggles button { flex: 1 1 0; min-width: 0; padding: var(--s1); }
+#stealBox { display: flex; align-items: center; gap: var(--s2); }
+#stealBox label { flex: 0 0 auto; color: var(--muted); font-size: var(--t1); }
+#players { display: flex; flex-direction: column; list-style: none; margin: 0; padding: 0; }
+.player-btn { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: var(--s1); padding-left: 0; border: 0; border-bottom: 2px solid var(--line); border-radius: 0; background: none; text-align: left; }
+.player-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-score { flex: 0 0 auto; font-size: var(--t2); font-weight: 800; font-variant-numeric: tabular-nums; }
+.current .player-btn { border-bottom-color: var(--gold); font-weight: 800; }
+.player-now { display: none; }
+.list { display: flex; flex-direction: column; list-style: none; margin: 0; padding: 0; }
+.row-text { flex: 1 1 auto; min-width: 0; font-size: var(--t1); }
+</style>
+</head>
+<body>
+<div id="banner" role="alert" style="display:none">Can't reach the TV. Check you are on the same WiFi.</div>
+
+<div class="page withBar">
+  <div class="head"><h1>Accent Wheel</h1><button type="button" class="quiet openSettings">Settings</button><button type="button" class="quiet goHome">Home</button></div>
+
+  <section class="group" id="gameCard" aria-label="The game">
+    <div class="status"><span class="pill" id="round">Connecting...</span><span class="pill" id="speedTag" style="display:none">Speed</span></div>
+    <div class="title" id="who"></div>
+    <div id="award" style="display:none"></div>
+    <div id="resultBox" style="display:none">
+      <div><div class="result-label">Voice</div><div id="voiceText" class="result-text"></div></div>
+      <div><div class="result-label">Task</div><div id="taskText" class="result-text"></div></div>
+    </div>
+    <div id="clock" class="bigClock" role="timer" style="display:none"></div>
+
+    <div id="scorePanel" style="display:none">
+      <div class="points" id="points">
+        <button type="button" data-points="1">1</button>
+        <button type="button" data-points="2">2</button>
+        <button type="button" data-points="3">3</button>
+        <button type="button" data-points="4">4</button>
+        <button type="button" data-points="5">5</button>
+      </div>
+      <div class="toggles">
+        <button type="button" id="commitBtn" aria-pressed="false">Commitment +3</button>
+        <button type="button" id="crackBtn" aria-pressed="false">Crack -2</button>
+      </div>
+      <div id="stealBox" style="display:none">
+        <label for="stealSel">Stolen by</label>
+        <select id="stealSel"></select>
+      </div>
+    </div>
+
+    <div class="btnRow" id="secondRow">
+      <button type="button" id="respinBtn" style="display:none">Spin again</button>
+      <button type="button" id="skipBtn" class="quiet">Skip turn</button>
+      <button type="button" id="speedBtn" class="quiet" aria-pressed="false">Speed: Off</button>
+    </div>
+  </section>
+
+  <section class="group" id="playersCard" aria-label="Players">
+    <h2>Players</h2>
+    <ul id="players"></ul>
+    <form id="playerForm" class="add" action="#" autocomplete="off">
+      <input id="playerInput" type="text" maxlength="30" placeholder="Name or team" aria-label="Name or team" autocomplete="off" autocorrect="off" enterkeyhint="done">
+      <button type="submit">Add</button>
+    </form>
+    <div id="playerError" class="err" role="alert" style="display:none"></div>
+  </section>
+</div>
+
+<div id="settings" style="display:none"><div class="page">
+  <div class="head"><h1>Settings</h1><button type="button" id="setClose">Close</button></div>
+  <section class="group" aria-label="Add voices">
+    <h2>Add a voice</h2>
+    <form id="voiceForm" class="add" action="#" autocomplete="off">
+      <input id="voiceInput" type="text" maxlength="60" placeholder="A new voice" aria-label="A new voice" autocomplete="off" enterkeyhint="done">
+      <button type="submit">Add</button>
+    </form>
+    <div id="voiceError" class="err" role="alert" style="display:none"></div>
+    <ul id="customVoices" class="list"></ul>
+  </section>
+  <section class="group" aria-label="Add tasks">
+    <h2>Add a task</h2>
+    <form id="taskForm" class="add" action="#" autocomplete="off">
+      <input id="taskInput" type="text" maxlength="60" placeholder="A new task" aria-label="A new task" autocomplete="off" enterkeyhint="done">
+      <button type="submit">Add</button>
+    </form>
+    <div id="taskError" class="err" role="alert" style="display:none"></div>
+    <ul id="customTasks" class="list"></ul>
+  </section>
+  <section class="group" aria-label="How to play">
+    <h2>How to play</h2>
+    <ol class="how">
+      <li>Spin. The TV picks a voice and a task.</li>
+      <li>Do the task in that voice until the timer ends.</li>
+      <li>Everyone votes with one hand: 1 finger is poor, 5 is brilliant. Tap the number most people show.</li>
+      <li>Commitment +3 if they never dropped the voice. Crack -2 if they burst out laughing.</li>
+      <li>Someone did it better? Pick them under Stolen by. They get half the points and the performer gets none.</li>
+      <li>Speed turns the timer to 15 seconds, and it starts by itself.</li>
+    </ol>
+  </section>
+  <button type="button" id="resetBtn" class="wide quiet">Reset scores</button>
+</div></div>
+
+<div id="bar"><button type="button" id="mainBtn" class="primary" disabled>Connecting...</button></div>
+
+<div id="toast" role="status" style="display:none"></div>
+
+<div id="modal" role="dialog" aria-modal="true" style="display:none">
+  <div id="modalBox">
+    <p id="modalText"></p>
+    <div id="modalRow">
+      <button type="button" id="modalNo">Cancel</button>
+      <button type="button" id="modalYes" class="primary">Yes</button>
+    </div>
+  </div>
+</div>
+
+<script src="/shared/hub-client.js"></script>
+<script>
+(function () {
+  var POLL_MS = 1000;
+  var STATE_URL = '/api/app/accent-wheel/state';
+  var ACTION_URL = '/api/app/accent-wheel/action';
+  var STATE_TIMEOUT_MS = 5000;
+  var ACTION_TIMEOUT_MS = 8000;
+  /* After the main button changes meaning, a second tap of a double tap must not count. */
+  var MAIN_LOCK_MS = 800;
+  var OFFLINE_TEXT = "Can't reach the TV. Check you are on the same WiFi.";
+
+  /* The contract gives tasks no group, so this tells built-in tasks from added ones
+     if the server sends no flag. */
+  var BUILT_IN_TASKS = [
+    'Propose marriage', 'Explain how a solar cell works', 'Apologise for breaking the TV remote',
+    'Order momos on the phone', 'Break up with your Wi-Fi router', 'Give a eulogy for the last gulab jamun',
+    'Convince Papa to raise your pocket money', 'Teach Nani to use Instagram',
+    'Defend yourself in court for stealing kaju katli', 'Give a pep talk to a team losing at Ludo',
+    'Explain the plot of your favourite movie', 'Announce the winner of a beauty contest for pets'
+  ];
+
+  function byId(id) { return document.getElementById(id); }
+  function show(el, visible) {
+    var value = visible ? '' : 'none';
+    if (el.style.display !== value) { el.style.display = value; }
+  }
+  /* All names and custom text reach the page through textContent, so they are never
+     read as HTML. Skipping unchanged text keeps polling from touching the DOM. */
+  function setText(el, text) {
+    if (el.textContent !== text) { el.textContent = text; }
+  }
+  function setDisabled(el, disabled) {
+    if (el.disabled !== disabled) { el.disabled = disabled; }
+  }
+  function setClass(el, name) {
+    if (el.className !== name) { el.className = name; }
+  }
+  function nowMs() { return new Date().getTime(); }
+
+  var els = {};
+  (function () {
+    var ids = ['banner', 'toast', 'gameCard', 'playersCard',
+      'round', 'speedTag', 'who', 'award', 'resultBox', 'voiceText', 'taskText', 'clock',
+      'scorePanel', 'points', 'commitBtn', 'crackBtn', 'stealBox', 'stealSel', 'respinBtn', 'skipBtn',
+      'playerForm', 'playerInput', 'playerError', 'players',
+      'speedBtn', 'voiceForm', 'voiceInput', 'voiceError', 'customVoices',
+      'taskForm', 'taskInput', 'taskError', 'customTasks',
+      'resetBtn', 'bar', 'mainBtn', 'modal', 'modalText', 'modalNo', 'modalYes'];
+    for (var i = 0; i < ids.length; i++) { els[ids[i]] = byId(ids[i]); }
+  })();
+
+  /* ---------- network ---------- */
+
+  /* Non-ASCII is sent as \uXXXX so the body survives any server charset default. */
+  function toJsonBody(obj) {
+    return JSON.stringify(obj).replace(/[\u0080-￿]/g, function (c) {
+      return '\\u' + ('0000' + c.charCodeAt(0).toString(16)).slice(-4);
+    });
+  }
+
+  /* cb(ok, data, gotReply). gotReply is false when the TV could not be reached at all. */
+  function request(method, url, body, timeoutMs, cb) {
+    var finished = false;
+    function finish(ok, data, gotReply) {
+      if (finished) { return; }
+      finished = true;
+      cb(ok, data, gotReply);
+    }
+    var xhr = new XMLHttpRequest();
+    try {
+      xhr.open(method, url, true);
+      xhr.timeout = timeoutMs;
+      xhr.setRequestHeader('Cache-Control', 'no-cache');
+      if (body !== null) { xhr.setRequestHeader('Content-Type', 'application/json'); }
+      xhr.ontimeout = function () { finish(false, null, false); };
+      xhr.onerror = function () { finish(false, null, false); };
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState !== 4 || xhr.status === 0) { return; }
+        var data = null;
+        try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+        finish(xhr.status >= 200 && xhr.status < 300 && data !== null, data, true);
+      };
+      xhr.send(body);
+    } catch (e) {
+      finish(false, null, false);
+    }
+  }
+
+  /* ---------- messages and confirmation ---------- */
+
+  var toastTimer = null;
+  function toast(text, bad) {
+    els.toast.textContent = text;
+    els.toast.className = bad ? 'bad' : '';
+    show(els.toast, true);
+    if (toastTimer) { clearTimeout(toastTimer); }
+    toastTimer = setTimeout(function () { show(els.toast, false); }, bad ? 6000 : 2500);
+  }
+
+  /* Our own box rather than window.confirm: some QR scanner browsers silently refuse
+     window.confirm, and then the button would never work. */
+  var modalYesFn = null;
+  function confirmBox(text, yesLabel, noLabel, yesFn) {
+    els.modalText.textContent = text;
+    els.modalYes.textContent = yesLabel;
+    els.modalNo.textContent = noLabel;
+    modalYesFn = yesFn;
+    show(els.modal, true);
+  }
+  els.modalNo.onclick = function () { modalYesFn = null; show(els.modal, false); };
+  els.modalYes.onclick = function () {
+    var fn = modalYesFn;
+    modalYesFn = null;
+    show(els.modal, false);
+    if (fn) { fn(); }
+  };
+
+  /* ---------- page position ---------- */
+
+  /* Runs fn, then scrolls by however much the thing the person is looking at moved.
+     That is the box they are typing in, or else the first card that starts on screen. */
+  function keepPlace(fn) {
+    var anchor = null;
+    var active = document.activeElement;
+    if (active && active.tagName === 'INPUT') {
+      anchor = active;
+    } else if (window.pageYOffset > 0) {
+      var cards = [els.gameCard, els.playersCard];
+      for (var i = 0; i < cards.length; i++) {
+        if (cards[i].getBoundingClientRect().top >= 0) { anchor = cards[i]; break; }
+      }
+    }
+    if (!anchor) { fn(); return; }
+    var before = anchor.getBoundingClientRect().top;
+    fn();
+    var moved = anchor.getBoundingClientRect().top - before;
+    if (moved !== 0) { window.scrollBy(0, moved); }
+  }
+
+  /* ---------- rendering ---------- */
+
+  var lastState = null;
+  var lastPhase = null;
+  var mainLockUntil = 0;
+  var busy = false;        /* a game action is on its way */
+  var score = { key: null, points: 0, commitment: false, crack: false, stealerId: '' };
+
+  function playerById(state, id) {
+    var players = state.players || [];
+    for (var i = 0; i < players.length; i++) {
+      if (players[i].id === id) { return players[i]; }
+    }
+    return null;
+  }
+
+  function currentName(state) {
+    var p = playerById(state, state.currentPlayerId);
+    return p ? p.name : '';
+  }
+
+  function plural(n) { return n === 1 ? '1 point' : n + ' points'; }
+
+  /* What the room would see if Give points were tapped now. */
+  function scorePreview(state) {
+    if (!score.points) { return ''; }
+    var stealer = score.stealerId ? playerById(state, score.stealerId) : null;
+    if (stealer) {
+      return 'Give ' + stealer.name + ' ' + plural(Math.ceil(score.points / 2));
+    }
+    var total = score.points + (score.commitment ? 3 : 0) - (score.crack ? 2 : 0);
+    if (total < 0) { total = 0; }
+    var name = currentName(state);
+    return 'Give ' + (name ? name + ' ' : '') + plural(total);
+  }
+
+  function awardText(award, state) {
+    if (!award) { return ''; }
+    if (typeof award === 'string') { return award; }
+    if (award.text || award.message) { return String(award.text || award.message); }
+    var p = playerById(state, award.playerId || award.stealerId);
+    var name = award.playerName || award.name || (p ? p.name : '');
+    var pts = award.points !== undefined ? award.points : award.total;
+    if (!name || pts === undefined) { return ''; }
+    var line = name + ' got ' + plural(Number(pts));
+    if (award.stolen) { line += award.fromName ? ', stolen from ' + award.fromName : ' (stolen)'; }
+    return line;
+  }
+
+  function renderGame(s) {
+    var phase = s.phase;
+    var name = currentName(s);
+    var noPlayers = !(s.players && s.players.length);
+
+    setText(els.round, 'Round ' + s.round);
+    show(els.speedTag, !!s.speedRound);
+    setText(els.who, noPlayers ? 'Everyone: ' + plural(Number(s.everyoneScore) || 0) : (name ? (/s$/i.test(name) ? name + "' turn" : name + "'s turn") : 'Tap a name'));
+
+    var award = phase === 'ready' ? awardText(s.lastAward, s) : '';
+    setText(els.award, award);
+    show(els.award, !!award);
+
+    /* Hidden during the spin, so a phone never spoils the TV. */
+    var showResult = phase === 'landed' || phase === 'performing';
+    show(els.resultBox, showResult);
+    if (showResult) {
+      setText(els.voiceText, s.voice ? s.voice.text : '');
+      setText(els.taskText, s.task ? s.task.text : '');
+    }
+
+    show(els.clock, phase === 'performing');
+    if (phase === 'performing') {
+      var left = Math.max(0, Number(s.secondsLeft) || 0);
+      setText(els.clock, String(left));
+      setClass(els.clock, left <= 10 ? 'bigClock low' : 'bigClock');
+    }
+
+    show(els.respinBtn, phase === 'landed');
+    setDisabled(els.respinBtn, busy);
+    setDisabled(els.skipBtn, busy);
+
+    renderScorePanel(s);
+    renderMain(s);
+  }
+
+  function renderScorePanel(s) {
+    var scoring = s.phase === 'scoring';
+    show(els.scorePanel, scoring);
+
+    /* A new performance starts a clean form. A poll never does. */
+    var key = scoring ? s.round + '-' + s.spinId : null;
+    if (key !== score.key) {
+      score.key = key;
+      score.points = 0;
+      score.commitment = false;
+      score.crack = false;
+      score.stealerId = '';
+    }
+    if (!scoring) { return; }
+
+    var buttons = els.points.getElementsByTagName('button');
+    for (var i = 0; i < buttons.length; i++) {
+      var n = Number(buttons[i].getAttribute('data-points'));
+      setClass(buttons[i], n === score.points ? 'chosen' : '');
+    }
+    setClass(els.commitBtn, score.commitment ? 'chosen' : '');
+    els.commitBtn.setAttribute('aria-pressed', score.commitment ? 'true' : 'false');
+    setClass(els.crackBtn, score.crack ? 'chosen' : '');
+    els.crackBtn.setAttribute('aria-pressed', score.crack ? 'true' : 'false');
+
+    renderStealOptions(s);
+  }
+
+  var stealSig = null;
+  function renderStealOptions(s) {
+    var others = [];
+    var players = s.players || [];
+    for (var i = 0; i < players.length; i++) {
+      if (players[i].id !== s.currentPlayerId) { others.push(players[i]); }
+    }
+    show(els.stealBox, others.length > 0);
+
+    var sig = JSON.stringify(others.map(function (p) { return [p.id, p.name]; }));
+    if (sig !== stealSig) {
+      /* Only rebuilt when the people change, so a poll cannot close an open picker. */
+      stealSig = sig;
+      els.stealSel.innerHTML = '';
+      var none = document.createElement('option');
+      none.value = '';
+      none.textContent = 'Nobody';
+      els.stealSel.appendChild(none);
+      for (var j = 0; j < others.length; j++) {
+        var opt = document.createElement('option');
+        opt.value = others[j].id;
+        opt.textContent = others[j].name;
+        els.stealSel.appendChild(opt);
+      }
+    }
+    var stillThere = false;
+    for (var k = 0; k < others.length; k++) {
+      if (others[k].id === score.stealerId) { stillThere = true; }
+    }
+    if (!stillThere) { score.stealerId = ''; }
+    if (els.stealSel.value !== score.stealerId) { els.stealSel.value = score.stealerId; }
+  }
+
+  function renderMain(s) {
+    var label = 'Please wait...';
+    var cls = 'primary';
+    var disabled = false;
+    switch (s.phase) {
+      case 'ready':
+        label = 'Spin';
+        cls = 'primary';
+        break;
+      case 'spinning':
+        label = 'Spinning...';
+        disabled = true;
+        break;
+      case 'landed':
+        label = 'Start';
+        cls = 'primary';
+        break;
+      case 'performing':
+        label = 'Stop';
+        break;
+      case 'scoring':
+        if (score.points) {
+          label = scorePreview(s);
+          cls = 'primary';
+        } else {
+          label = 'Tap 1 to 5';
+        }
+        break;
+      default:
+        disabled = true;
+    }
+    setText(els.mainBtn, label);
+    setClass(els.mainBtn, cls);
+    setDisabled(els.mainBtn, disabled || busy);
+  }
+
+  /* Rows are updated in place, because replacing a row under a finger loses the tap. */
+  var playerRows = {};
+  function buildPlayerRow(id) {
+    var li = document.createElement('li');
+    li.className = 'row';
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'player-btn';
+    var text = document.createElement('span');
+    text.className = 'player-name';
+    var name = document.createElement('span');
+    var now = document.createElement('span');
+    now.className = 'player-now';
+    now.textContent = 'Their turn';
+    text.appendChild(name);
+    text.appendChild(now);
+    var pts = document.createElement('span');
+    pts.className = 'player-score';
+    btn.appendChild(text);
+    btn.appendChild(pts);
+    btn.onclick = function () { gameAction({ action: 'set_current', id: id }); };
+    li.appendChild(btn);
+
+    var remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'x';
+    remove.textContent = '\u00d7';
+    remove.setAttribute('aria-label', 'Remove player');
+    remove.onclick = function () {
+      confirmBox('Remove ' + name.textContent + ' and their score?', 'Remove', 'Keep', function () {
+        gameAction({ action: 'remove_player', id: id });
+      });
+    };
+    li.appendChild(remove);
+
+    return { li: li, name: name, pts: pts };
+  }
+
+  function renderPlayers(s) {
+    var players = s.players || [];
+    var seen = {};
+    for (var i = 0; i < players.length; i++) {
+      var p = players[i];
+      seen[p.id] = true;
+      var row = playerRows[p.id];
+      if (!row) {
+        row = buildPlayerRow(p.id);
+        playerRows[p.id] = row;
+      }
+      setText(row.name, p.name);
+      setText(row.pts, String(p.score));
+      setClass(row.li, p.id === s.currentPlayerId ? 'row current' : 'row');
+      if (els.players.children[i] !== row.li) {
+        els.players.insertBefore(row.li, els.players.children[i] || null);
+      }
+    }
+    for (var id in playerRows) {
+      if (playerRows.hasOwnProperty(id) && !seen[id]) {
+        els.players.removeChild(playerRows[id].li);
+        delete playerRows[id];
+      }
+    }
+  }
+
+  function isCustom(slice, wheel) {
+    if (slice.custom === true) { return true; }
+    if (slice.group === 'Custom') { return true; }
+    if (wheel === 'task' && slice.custom === undefined) {
+      return BUILT_IN_TASKS.indexOf(slice.text) < 0;
+    }
+    return false;
+  }
+
+  var sliceSigs = { voice: null, task: null };
+  function renderSlices(all, wheel, listEl) {
+    var custom = [];
+    for (var i = 0; i < (all || []).length; i++) {
+      if (isCustom(all[i], wheel)) { custom.push(all[i]); }
+    }
+    var sig = JSON.stringify(custom.map(function (x) { return [x.id, x.text]; }));
+    if (sig === sliceSigs[wheel]) { return; }
+    sliceSigs[wheel] = sig;
+    listEl.innerHTML = '';
+    for (var j = 0; j < custom.length; j++) {
+      listEl.appendChild(buildSliceRow(custom[j], wheel));
+    }
+  }
+
+  function buildSliceRow(slice, wheel) {
+    var li = document.createElement('li');
+    li.className = 'row';
+    var text = document.createElement('div');
+    text.className = 'row-text';
+    text.textContent = slice.text;
+    li.appendChild(text);
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'x';
+    btn.textContent = '\u00d7';
+    btn.setAttribute('aria-label', 'Remove');
+    btn.onclick = function () { gameAction({ action: 'remove_slice', wheel: wheel, id: slice.id }); };
+    li.appendChild(btn);
+    return li;
+  }
+
+  function renderSpeed(s) {
+    setText(els.speedBtn, 'Speed: ' + (s.speedRound ? 'On' : 'Off'));
+    setClass(els.speedBtn, s.speedRound ? 'chosen' : 'quiet');
+    els.speedBtn.setAttribute('aria-pressed', s.speedRound ? 'true' : 'false');
+  }
+
+  function applyState(s) {
+    lastState = s;
+    if (s.phase !== lastPhase) {
+      /* The main button now means something else, so do not accept a tap for a moment. */
+      if (lastPhase !== null) { mainLockUntil = nowMs() + MAIN_LOCK_MS; }
+      lastPhase = s.phase;
+    }
+    keepPlace(function () {
+      renderGame(s);
+      renderPlayers(s);
+      renderSlices(s.voices, 'voice', els.customVoices);
+      renderSlices(s.tasks, 'task', els.customTasks);
+      renderSpeed(s);
+    });
+    setDisabled(els.resetBtn, busy);
+    setDisabled(els.speedBtn, busy);
+  }
+
+  /* Changes on this phone that the server does not know about yet. */
+  function refreshLocal() {
+    if (lastState) { applyState(lastState); }
+  }
+
+  function isState(data) {
+    return !!data && typeof data === 'object' && 'phase' in data;
+  }
+
+  /* ---------- polling ---------- */
+
+  var stateClock = 0;      /* increases with every state request and action reply */
+  var appliedClock = 0;    /* polls started before this point are out of date */
+  var pollBusy = false;
+  var pollAgain = false;
+  var pollTimer = null;
+  var pollCallbacks = [];
+  var failures = 0;
+
+  function poll(cb) {
+    if (cb) { pollCallbacks.push(cb); }
+    if (pollBusy) { pollAgain = true; return; }
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+    pollBusy = true;
+    stateClock++;
+    var startedAt = stateClock;
+    /* A poll that began before the callback was added could be old, so callbacks
+       added while a poll is running wait for the next one. */
+    var waiting = pollCallbacks;
+    pollCallbacks = [];
+    request('GET', STATE_URL, null, STATE_TIMEOUT_MS, function (ok, data) {
+      pollBusy = false;
+      try {
+        if (ok && isState(data)) {
+          failures = 0;
+          show(els.banner, false);
+          if (startedAt > appliedClock) { applyState(data); }
+        } else {
+          failures++;
+          if (failures >= 2) { show(els.banner, true); }
+        }
+      } catch (e) {
+        /* A bad reply must never stop the polling. */
+      }
+      for (var i = 0; i < waiting.length; i++) {
+        try { waiting[i](ok && isState(data) ? data : null); } catch (e2) { /* keep going */ }
+      }
+      if (pollAgain) {
+        pollAgain = false;
+        poll();
+      } else {
+        pollTimer = setTimeout(poll, POLL_MS);
+      }
+    });
+  }
+
+  /* ---------- actions ---------- */
+
+  function raceSig(s) {
+    if (!s) { return ''; }
+    function ids(list) {
+      return (list || []).map(function (x) { return x.id; }).join(',');
+    }
+    return [s.phase, s.spinId, s.round, s.currentPlayerId, ids(s.players), ids(s.voices), ids(s.tasks)].join('|');
+  }
+
+  function applyReply(data) {
+    stateClock++;
+    appliedClock = stateClock;
+    applyState(data);
+  }
+
+  /* For anything another phone could have beaten us to. One at a time, so a double tap
+     counts once. If the server refuses and the game has moved on, someone else got
+     there first: the page just shows the new state. If nothing moved, the refusal was
+     about this tap, so the server's message is shown. */
+  function gameAction(fields, onDone) {
+    if (busy) { return; }
+    busy = true;
+    var before = raceSig(lastState);
+    refreshLocal();
+
+    function done() {
+      busy = false;
+      refreshLocal();
+      if (onDone) { onDone(); }
+    }
+
+    request('POST', ACTION_URL, toJsonBody(fields), ACTION_TIMEOUT_MS, function (ok, data, gotReply) {
+      if (ok && isState(data)) {
+        busy = false;
+        applyReply(data);
+        if (onDone) { onDone(); }
+        return;
+      }
+      if (!gotReply) {
+        done();
+        toast(OFFLINE_TEXT, true);
+        poll();
+        return;
+      }
+      var message = data && data.error ? String(data.error) : 'That did not work. Please try again.';
+      poll(function (fresh) {
+        done();
+        /* "Not allowed during ..." is always a tap that arrived too late, never a real problem. */
+        if (message.indexOf('Not allowed during') === 0) { return; }
+        if (!fresh || raceSig(fresh) === before) { toast(message, true); }
+      });
+    });
+  }
+
+  function tapMain() {
+    if (busy || !lastState || nowMs() < mainLockUntil) { return; }
+    switch (lastState.phase) {
+      case 'ready':
+        gameAction({ action: 'spin' });
+        break;
+      case 'landed':
+        gameAction({ action: 'start_timer' });
+        break;
+      case 'performing':
+        gameAction({ action: 'stop_timer' });
+        break;
+      case 'scoring':
+        if (!score.points) {
+          window.scrollTo(0, 0);
+          return;
+        }
+        var fields = {
+          action: 'score',
+          points: String(score.points),
+          commitment: score.commitment ? 'true' : 'false',
+          crack: score.crack ? 'true' : 'false'
+        };
+        if (score.stealerId) { fields.stealerId = score.stealerId; }
+        gameAction(fields);
+        break;
+    }
+  }
+
+  els.mainBtn.onclick = tapMain;
+  els.respinBtn.onclick = function () { gameAction({ action: 'spin' }); };
+  els.skipBtn.onclick = function () { gameAction({ action: 'skip_turn' }); };
+
+  els.points.onclick = function (e) {
+    var target = e.target || e.srcElement;
+    var n = target && target.getAttribute ? Number(target.getAttribute('data-points')) : 0;
+    if (n) {
+      score.points = n;
+      refreshLocal();
+    }
+  };
+  els.commitBtn.onclick = function () { score.commitment = !score.commitment; refreshLocal(); };
+  els.crackBtn.onclick = function () { score.crack = !score.crack; refreshLocal(); };
+  els.stealSel.onchange = function () { score.stealerId = els.stealSel.value; refreshLocal(); };
+
+  els.speedBtn.onclick = function () {
+    if (!lastState) { return; }
+    gameAction({ action: 'set_speed', on: lastState.speedRound ? 'false' : 'true' });
+  };
+
+  els.resetBtn.onclick = function () {
+    confirmBox('Set every score back to 0? Players and added voices stay.', 'Reset scores', 'Cancel', function () {
+      gameAction({ action: 'reset_scores' });
+    });
+  };
+
+  /* ---------- add forms ---------- */
+
+  /* The typed text only goes away once the server has accepted it. These always show
+     the server's message, such as a duplicate name. */
+  function wireAddForm(form, input, errorEl, makeFields) {
+    var sending = false;
+    function hideError() { show(errorEl, false); }
+    input.oninput = hideError;
+    form.onsubmit = function (e) {
+      if (e && e.preventDefault) { e.preventDefault(); }
+      var text = input.value.replace(/^\s+|\s+$/g, '');
+      if (!text) { input.focus(); return false; }
+      if (sending) { return false; }
+      sending = true;
+      hideError();
+      request('POST', ACTION_URL, toJsonBody(makeFields(text)), ACTION_TIMEOUT_MS, function (ok, data, gotReply) {
+        sending = false;
+        if (ok && isState(data)) {
+          input.value = '';
+          applyReply(data);
+          return;
+        }
+        var message = !gotReply ? OFFLINE_TEXT : (data && data.error ? String(data.error) : 'That did not work. Please try again.');
+        keepPlace(function () {
+          errorEl.textContent = message;
+          show(errorEl, true);
+        });
+      });
+      return false;
+    };
+  }
+
+  wireAddForm(els.playerForm, els.playerInput, els.playerError, function (text) {
+    return { action: 'add_player', name: text };
+  });
+  wireAddForm(els.voiceForm, els.voiceInput, els.voiceError, function (text) {
+    return { action: 'add_slice', wheel: 'voice', text: text };
+  });
+  wireAddForm(els.taskForm, els.taskInput, els.taskError, function (text) {
+    return { action: 'add_slice', wheel: 'task', text: text };
+  });
+
+  /* The on-screen keyboard needs the room, so the big button steps aside while typing. */
+  function typingChanged() {
+    var active = document.activeElement;
+    var typing = !!active && active.tagName === 'INPUT';
+    setClass(els.bar, typing ? 'typing' : '');
+  }
+  document.addEventListener('focus', typingChanged, true);
+  document.addEventListener('blur', function () { setTimeout(typingChanged, 0); }, true);
+
+  /* ---------- home ---------- */
+
+  var goingHome = false;
+  function askHome() {
+    confirmBox('Go back to the home screen? This moves the TV and every phone.', 'Go home', 'Stay', function () {
+      if (goingHome) { return; }
+      goingHome = true;
+      request('POST', '/api/hub/home', '{}', ACTION_TIMEOUT_MS, function (ok, data, gotReply) {
+        goingHome = false;
+        if (ok) {
+          location.replace('/');
+          return;
+        }
+        toast(!gotReply ? OFFLINE_TEXT : (data && data.error ? String(data.error) : 'That did not work. Please try again.'), true);
+      });
+    });
+  }
+  (function () {
+    var homes = document.querySelectorAll('.goHome');
+    for (var i = 0; i < homes.length; i++) { homes[i].onclick = askHome; }
+  })();
+
+  /* ---------- settings ---------- */
+
+  function showSettings(on) {
+    var box = document.getElementById('settings');
+    box.style.display = on ? '' : 'none';
+    document.documentElement.style.overflow = on ? 'hidden' : '';
+    if (on) { box.scrollTop = 0; }
+  }
+  (function () {
+    var open = document.querySelectorAll('.openSettings');
+    for (var i = 0; i < open.length; i++) { open[i].onclick = function () { showSettings(true); }; }
+    document.getElementById('setClose').onclick = function () { showSettings(false); };
+  })();
+
+  /* ---------- start ---------- */
+
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) { poll(); }
+  });
+  try {
+    if (window.HubClient) { window.HubClient.start({ kind: 'phone', app: 'accent-wheel' }); }
+  } catch (e) {
+    /* The game still works from this page without it. */
+  }
+  poll();
+})();
+</script>
+</body>
+</html>

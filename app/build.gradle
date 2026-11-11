@@ -1,0 +1,48 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.raghav.karaoke'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.raghav.karaoke'
+        minSdk 26
+        // 28 keeps plain file access to USB sticks (no scoped storage) on the Android 9 TV.
+        targetSdk 28
+        versionCode 1
+        versionName '1.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            // Sideloaded, never published: the debug key is enough.
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        // targetSdk 28 is deliberate; lint treats it as fatal for release builds otherwise.
+        checkReleaseBuilds false
+    }
+
+    packaging {
+        resources {
+            excludes += ['META-INF/DEPENDENCIES', 'META-INF/LICENSE*', 'META-INF/NOTICE*',
+                         'META-INF/*.kotlin_module', 'META-INF/INDEX.LIST']
+        }
+    }
+}
+
+dependencies {
+    implementation project(':core')
+    implementation 'androidx.media3:media3-exoplayer:1.4.1'
+    implementation 'androidx.media3:media3-common:1.4.1'
+}

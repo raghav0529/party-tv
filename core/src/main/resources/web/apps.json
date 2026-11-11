@@ -1,0 +1,44 @@
+[
+  {
+    "id": "karaoke",
+    "title": "Karaoke",
+    "subtitle": "Pick songs from your phone and sing",
+    "icon": "mic",
+    "backend": true
+  },
+  {
+    "id": "accent-wheel",
+    "title": "Accent Wheel",
+    "subtitle": "Spin a voice and a task, then perform",
+    "icon": "wheel",
+    "backend": true
+  },
+  {
+    "id": "reverse-charades",
+    "title": "Reverse Charades",
+    "subtitle": "Your whole team acts, one person guesses",
+    "icon": "charades",
+    "backend": true
+  },
+  {
+    "id": "pictionary",
+    "title": "Pictionary",
+    "subtitle": "Draw on your phone, your team guesses",
+    "icon": "pencil",
+    "backend": true
+  },
+  {
+    "id": "english-song",
+    "title": "Lost in Translation",
+    "subtitle": "Guess the Bollywood song from its English lyrics",
+    "icon": "speech",
+    "backend": true
+  },
+  {
+    "id": "emoji-movie",
+    "title": "Emoji Movie",
+    "subtitle": "Guess the Bollywood movie from emojis",
+    "icon": "film",
+    "backend": true
+  }
+]

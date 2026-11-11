@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0c201b">
+<title>Karaoke</title>
+<style>
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: #0c201b;
+  color: #f3eee2;
+  font-family: -apple-system, "Roboto", "Noto Sans", "Noto Sans Devanagari", "Droid Sans", "Segoe UI", "Mangal", Arial, sans-serif;
+  font-size: 19px;
+  line-height: 1.35;
+  -webkit-text-size-adjust: 100%;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+.page { max-width: 640px; margin: 0 auto; padding: 16px 12px 96px; }
+h1 { margin: 4px 0 16px; font-family: Georgia, "Noto Serif", "Droid Serif", serif; color: #d9b26a; font-size: 30px; text-align: center; }
+h2 { margin: 0 0 12px; color: #d9b26a; font-size: 22px; }
+.card {
+  background: #143630;
+  border: 1px solid #2f5c52;
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 16px;
+}
+button {
+  min-height: 56px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 2px solid #d9b26a;
+  background: #0c201b;
+  color: #e8c98a;
+  font: inherit;
+  font-weight: bold;
+  cursor: pointer;
+  -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+button.primary { background: #d9b26a; color: #0c201b; }
+button.done { background: #2f6b2f; border-color: #8fd18f; color: #ffffff; }
+button:active { background: #e8c98a; color: #0c201b; }
+button[disabled] { background: #143630; border-color: #2f5c52; color: #a9bfb7; cursor: default; }
+button:focus-visible, input:focus-visible { outline: 3px solid #ffffff; outline-offset: 1px; }
+
+.song-title { font-size: 24px; font-weight: bold; }
+.song-artist { color: #f3eee2; margin-top: 2px; }
+.controls { display: flex; margin-top: 14px; }
+.controls button { flex: 1 1 0; min-width: 0; font-size: 21px; min-height: 64px; }
+.controls button + button { margin-left: 10px; }
+#vocalsBtn { display: block; width: 100%; margin-top: 10px; }
+.caption { margin: 8px 0 0; color: #f3eee2; font-size: 16px; }
+
+.search-row { display: flex; }
+#q {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 56px;
+  padding: 8px 12px;
+  border: 2px solid #d9b26a;
+  border-radius: 10px;
+  background: #f3eee2;
+  color: #0c201b;
+  font: inherit;
+  font-size: 20px;
+  -webkit-appearance: none;
+}
+#q::placeholder { color: #5f7a72; opacity: 1; }
+#searchBtn { margin-left: 8px; flex: 0 0 auto; }
+
+.status { margin: 12px 0 0; color: #f3eee2; }
+.error {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  background: #143630;
+  border: 2px solid #e8806a;
+  border-radius: 10px;
+  color: #ffffff;
+}
+.list { list-style: none; margin: 12px 0 0; padding: 0; }
+.row {
+  display: flex;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid #2f5c52;
+}
+.row img {
+  flex: 0 0 auto;
+  width: 56px;
+  height: 56px;
+  margin-right: 10px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: #0c201b;
+}
+.row-text { flex: 1 1 auto; min-width: 0; margin-right: 10px; }
+.row-title { font-weight: bold; }
+.row-meta { color: #f3eee2; font-size: 16px; margin-top: 2px; }
+.row button { flex: 0 0 auto; min-width: 88px; }
+
+#banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  padding: 8px 12px;
+  background: #d9b26a;
+  color: #0c201b;
+  font-size: 17px;
+  font-weight: bold;
+  text-align: center;
+}
+#toast {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 16px;
+  z-index: 10;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 14px;
+  background: #f3eee2;
+  color: #0c201b;
+  border-radius: 10px;
+  font-weight: bold;
+  text-align: center;
+}
+.head { display: flex; align-items: center; margin: 4px 0 16px; }
+.head h1 { flex: 1 1 auto; min-width: 0; margin: 0; text-align: left; }
+#homeBtn { flex: 0 0 auto; min-height: 44px; margin-left: 10px; font-size: 17px; }
+#homeBox {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.8);
+}
+#homeCard {
+  max-width: 460px;
+  margin: 60px auto 0;
+  padding: 18px;
+  background: #0c201b;
+  border: 2px solid #d9b26a;
+  border-radius: 12px;
+}
+#homeText { margin: 0 0 16px; font-size: 21px; }
+#homeRow { display: flex; }
+#homeRow button { flex: 1 1 0; min-width: 0; }
+#homeStay { margin-right: 8px; }
+</style>
+</head>
+<body>
+<div id="banner" role="alert" style="display:none">Can't reach the TV. Check you are on the same WiFi.</div>
+
+<div class="page">
+  <div class="head">
+    <h1>Karaoke</h1>
+    <button type="button" id="homeBtn">Home</button>
+  </div>
+
+  <section class="card" aria-label="Now playing">
+    <h2>Now playing</h2>
+    <div id="nowTitle" class="song-title">Connecting to the TV...</div>
+    <div id="nowArtist" class="song-artist"></div>
+    <div id="lastError" class="error" style="display:none"></div>
+    <div class="controls">
+      <button type="button" id="pauseBtn" class="primary" disabled>Pause</button>
+      <button type="button" id="skipBtn" disabled>Skip</button>
+    </div>
+    <button type="button" id="vocalsBtn">Vocals: On</button>
+    <p class="caption">Reduces the singer's voice. Works better on some songs.</p>
+  </section>
+
+  <section class="card" aria-label="Search">
+    <h2>Find a song</h2>
+    <form id="searchForm" class="search-row" action="#" autocomplete="off">
+      <input id="q" type="text" placeholder="Type a song name" aria-label="Type a song name" autocomplete="off" autocorrect="off" enterkeyhint="search">
+      <button type="submit" id="searchBtn" class="primary">Search</button>
+    </form>
+    <p id="searchStatus" class="status" role="status" style="display:none"></p>
+    <div id="searchError" class="error" role="alert" style="display:none"></div>
+    <ul id="results" class="list"></ul>
+  </section>
+
+  <section class="card" aria-label="Up next">
+    <h2>Up next</h2>
+    <p id="queueEmpty" class="status">Nothing queued yet</p>
+    <ul id="queue" class="list"></ul>
+  </section>
+</div>
+
+<div id="toast" role="status" style="display:none"></div>
+
+<div id="homeBox" role="dialog" aria-modal="true" style="display:none">
+  <div id="homeCard">
+    <p id="homeText">Go back to the home screen? This moves the TV and every phone. The music pauses and the song list stays.</p>
+    <div id="homeRow">
+      <button type="button" id="homeStay">Stay</button>
+      <button type="button" id="homeGo" class="primary">Go home</button>
+    </div>
+  </div>
+</div>
+
+<script src="/shared/hub-client.js"></script>
+<script>
+(function () {
+  var POLL_MS = 2000;
+  var STATE_TIMEOUT_MS = 5000;
+  var CONTROL_TIMEOUT_MS = 8000;
+  var SEARCH_TIMEOUT_MS = 25000;
+  var CONTROL_LOCK_MS = 600;
+  var ADDED_RESET_MS = 2500;
+  var OFFLINE_TEXT = "Can't reach the TV. Check you are on the same WiFi.";
+
+  function byId(id) { return document.getElementById(id); }
+  function show(el, visible) { el.style.display = visible ? '' : 'none'; }
+
+  var els = {
+    banner: byId('banner'),
+    toast: byId('toast'),
+    nowTitle: byId('nowTitle'),
+    nowArtist: byId('nowArtist'),
+    lastError: byId('lastError'),
+    pauseBtn: byId('pauseBtn'),
+    skipBtn: byId('skipBtn'),
+    vocalsBtn: byId('vocalsBtn'),
+    form: byId('searchForm'),
+    q: byId('q'),
+    searchStatus: byId('searchStatus'),
+    searchError: byId('searchError'),
+    results: byId('results'),
+    queueEmpty: byId('queueEmpty'),
+    queue: byId('queue')
+  };
+
+  /* ---------- network ---------- */
+
+  /* Non-ASCII is sent as \uXXXX so the body survives any server charset default. */
+  function toJsonBody(obj) {
+    return JSON.stringify(obj).replace(/[\u0080-\uffff]/g, function (c) {
+      return '\\u' + ('0000' + c.charCodeAt(0).toString(16)).slice(-4);
+    });
+  }
+
+  /* cb(ok, data): ok is true for a 2xx with parseable JSON. data is the parsed
+     body when there is one (also on error statuses), otherwise null. */
+  function request(method, url, body, timeoutMs, cb) {
+    var finished = false;
+    function finish(ok, data) {
+      if (finished) { return; }
+      finished = true;
+      cb(ok, data);
+    }
+    var xhr = new XMLHttpRequest();
+    try {
+      xhr.open(method, url, true);
+      xhr.timeout = timeoutMs;
+      xhr.setRequestHeader('Cache-Control', 'no-cache');
+      if (body !== null) { xhr.setRequestHeader('Content-Type', 'application/json'); }
+      xhr.ontimeout = function () { finish(false, null); };
+      xhr.onerror = function () { finish(false, null); };
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState !== 4 || xhr.status === 0) { return; }
+        var data = null;
+        try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+        finish(xhr.status >= 200 && xhr.status < 300 && data !== null, data);
+      };
+      xhr.send(body);
+    } catch (e) {
+      finish(false, null);
+    }
+  }
+
+  function post(url, obj, cb) {
+    request('POST', url, toJsonBody(obj), CONTROL_TIMEOUT_MS, cb);
+  }
+
+  /* ---------- small helpers ---------- */
+
+  var toastTimer = null;
+  function toast(text) {
+    els.toast.textContent = text;
+    show(els.toast, true);
+    if (toastTimer) { clearTimeout(toastTimer); }
+    toastTimer = setTimeout(function () { show(els.toast, false); }, 2500);
+  }
+
+  function formatDuration(sec) {
+    sec = Math.floor(Number(sec) || 0);
+    if (sec <= 0) { return ''; }
+    var s = sec % 60;
+    return Math.floor(sec / 60) + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  function joinParts(parts) {
+    var out = [];
+    for (var i = 0; i < parts.length; i++) {
+      if (parts[i]) { out.push(parts[i]); }
+    }
+    return out.join(' \u00b7 ');
+  }
+
+  function makeDiv(className, text) {
+    var d = document.createElement('div');
+    d.className = className;
+    d.textContent = text;
+    return d;
+  }
+
+  /* ---------- state ---------- */
+
+  var stateClock = 0;      /* increases with every state request and control reply */
+  var appliedClock = 0;    /* polls started before this point are out of date */
+  var pollBusy = false;
+  var pollAgain = false;
+  var pollTimer = null;
+  var queueSig = null;
+  var removing = {};
+  var lastQueue = [];
+
+  function applyNow(state) {
+    var now = state.now;
+    if (now) {
+      els.nowTitle.textContent = now.title || 'Unknown song';
+      els.nowArtist.textContent = now.artist || '';
+    } else {
+      els.nowTitle.textContent = 'Nothing playing. Search for a song below.';
+      els.nowArtist.textContent = '';
+    }
+    els.pauseBtn.textContent = state.paused ? 'Play' : 'Pause';
+    els.pauseBtn.disabled = !now;
+    els.skipBtn.disabled = !now;
+    els.vocalsBtn.textContent = state.vocalCut ? 'Vocals: Reduced' : 'Vocals: On';
+    els.lastError.textContent = state.lastError || '';
+    show(els.lastError, !!state.lastError);
+  }
+
+  function buildQueueRow(song) {
+    var li = document.createElement('li');
+    li.className = 'row';
+    var text = document.createElement('div');
+    text.className = 'row-text';
+    text.appendChild(makeDiv('row-title', song.title || 'Unknown song'));
+    text.appendChild(makeDiv('row-meta', joinParts([song.artist, formatDuration(song.durationSec)])));
+    li.appendChild(text);
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = removing[song.uid] ? 'Removing...' : 'Remove';
+    btn.disabled = !!removing[song.uid];
+    btn.onclick = function () { removeSong(song.uid); };
+    li.appendChild(btn);
+    return li;
+  }
+
+  /* Only rebuilds when the list changed, so polling does not disturb a tap or scroll. */
+  function applyQueue(queue) {
+    lastQueue = queue;
+    var sig = JSON.stringify(queue.map(function (s) {
+      return [s.uid, s.title, s.artist, s.durationSec, !!removing[s.uid]];
+    }));
+    if (sig === queueSig) { return; }
+    queueSig = sig;
+    els.queue.innerHTML = '';
+    for (var i = 0; i < queue.length; i++) {
+      els.queue.appendChild(buildQueueRow(queue[i]));
+    }
+    show(els.queueEmpty, queue.length === 0);
+  }
+
+  function applyState(state) {
+    applyNow(state);
+    applyQueue(state.queue || []);
+  }
+
+  function isState(data) {
+    return !!data && typeof data === 'object' && 'queue' in data;
+  }
+
+  function poll() {
+    if (pollBusy) { pollAgain = true; return; }
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+    pollBusy = true;
+    stateClock++;
+    var startedAt = stateClock;
+    request('GET', '/api/state', null, STATE_TIMEOUT_MS, function (ok, data) {
+      pollBusy = false;
+      if (ok && isState(data)) {
+        show(els.banner, false);
+        if (startedAt > appliedClock) { applyState(data); }
+      } else {
+        show(els.banner, true);
+      }
+      if (pollAgain) {
+        pollAgain = false;
+        poll();
+      } else {
+        pollTimer = setTimeout(poll, POLL_MS);
+      }
+    });
+  }
+
+  /* ---------- controls ---------- */
+
+  var controlLocked = false;
+  function sendControl(action) {
+    if (controlLocked) { return; }
+    controlLocked = true;
+    setTimeout(function () { controlLocked = false; }, CONTROL_LOCK_MS);
+    post('/api/control', { action: action }, function (ok, data) {
+      if (!ok) {
+        toast(data && data.error ? data.error : OFFLINE_TEXT);
+        return;
+      }
+      if (isState(data)) {
+        stateClock++;
+        appliedClock = stateClock;
+        applyState(data);
+      } else {
+        poll();
+      }
+    });
+  }
+
+  els.pauseBtn.onclick = function () { sendControl('toggle_pause'); };
+  els.skipBtn.onclick = function () { sendControl('skip'); };
+  els.vocalsBtn.onclick = function () { sendControl('toggle_vocals'); };
+
+  /* ---------- queue actions ---------- */
+
+  function removeSong(uid) {
+    if (removing[uid]) { return; }
+    removing[uid] = true;
+    applyQueue(lastQueue);
+    post('/api/queue/remove', { uid: uid }, function (ok, data) {
+      delete removing[uid];
+      applyQueue(lastQueue);
+      if (!ok) {
+        toast(data && data.error ? data.error : "Could not remove that song. Please try again.");
+      }
+      poll();
+    });
+  }
+
+  function addSong(song, btn) {
+    if (btn.disabled) { return; }
+    btn.disabled = true;
+    btn.textContent = 'Adding...';
+    post('/api/queue', { id: song.id }, function (ok, data) {
+      btn.disabled = false;
+      if (!ok) {
+        btn.textContent = 'Add';
+        toast(data && data.error ? data.error : OFFLINE_TEXT);
+        return;
+      }
+      btn.textContent = 'Added';
+      btn.className = 'done';
+      toast('Added to the list');
+      poll();
+      /* Back to Add after a moment, because the same song can be added again. */
+      setTimeout(function () {
+        btn.textContent = 'Add';
+        btn.className = 'primary';
+      }, ADDED_RESET_MS);
+    });
+  }
+
+  /* ---------- search ---------- */
+
+  var searchSeq = 0;
+  var activeQuery = null;
+
+  function buildResultRow(song) {
+    var li = document.createElement('li');
+    li.className = 'row';
+
+    if (song.image) {
+      var img = document.createElement('img');
+      img.setAttribute('loading', 'lazy');
+      img.alt = '';
+      img.onerror = function () { img.style.display = 'none'; };
+      img.src = song.image;
+      li.appendChild(img);
+    }
+
+    var text = document.createElement('div');
+    text.className = 'row-text';
+    text.appendChild(makeDiv('row-title', song.title || 'Unknown song'));
+    text.appendChild(makeDiv('row-meta', joinParts([song.artist, song.album])));
+    var duration = formatDuration(song.durationSec);
+    if (duration) { text.appendChild(makeDiv('row-meta', duration)); }
+    li.appendChild(text);
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'primary';
+    btn.textContent = 'Add';
+    btn.onclick = function () { addSong(song, btn); };
+    li.appendChild(btn);
+    return li;
+  }
+
+  function showSearchError(text) {
+    els.searchError.textContent = text;
+    show(els.searchError, true);
+  }
+
+  function runSearch() {
+    var q = els.q.value.replace(/^\s+|\s+$/g, '');
+    if (!q) { els.q.focus(); return; }
+    if (q === activeQuery) { return; }
+    activeQuery = q;
+    searchSeq++;
+    var seq = searchSeq;
+
+    els.q.blur();
+    els.results.innerHTML = '';
+    show(els.searchError, false);
+    els.searchStatus.textContent = 'Searching...';
+    show(els.searchStatus, true);
+
+    request('GET', '/api/search?q=' + encodeURIComponent(q), null, SEARCH_TIMEOUT_MS, function (ok, data) {
+      if (seq !== searchSeq) { return; }
+      activeQuery = null;
+      show(els.searchStatus, false);
+
+      var results = data && data.results && data.results.length ? data.results : [];
+      var error = data && data.error ? String(data.error) : '';
+      if (!error && !ok) {
+        error = "Search did not work. Check you are on the same WiFi and try again.";
+      }
+      if (error) { showSearchError(error); }
+
+      for (var i = 0; i < results.length; i++) {
+        els.results.appendChild(buildResultRow(results[i]));
+      }
+      if (!error && results.length === 0) {
+        els.searchStatus.textContent = 'No songs found. Try a different spelling.';
+        show(els.searchStatus, true);
+      }
+    });
+  }
+
+  els.form.onsubmit = function (e) {
+    if (e && e.preventDefault) { e.preventDefault(); }
+    runSearch();
+    return false;
+  };
+
+  /* ---------- home ---------- */
+
+  /* Our own box rather than window.confirm: some QR scanner browsers silently refuse
+     window.confirm, and then the button would never work. */
+  var goingHome = false;
+  byId('homeBtn').onclick = function () { show(byId('homeBox'), true); };
+  byId('homeStay').onclick = function () { show(byId('homeBox'), false); };
+  byId('homeGo').onclick = function () {
+    show(byId('homeBox'), false);
+    if (goingHome) { return; }
+    goingHome = true;
+    post('/api/hub/home', {}, function (ok, data) {
+      goingHome = false;
+      if (ok) {
+        location.replace('/');
+      } else {
+        toast(data && data.error ? data.error : OFFLINE_TEXT);
+      }
+    });
+  };
+
+  /* ---------- start ---------- */
+
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) { poll(); }
+  });
+  try {
+    if (window.HubClient) { window.HubClient.start({ kind: 'phone', app: 'karaoke' }); }
+  } catch (e) {
+    /* The song controls still work from this page without it. */
+  }
+  poll();
+})();
+</script>
+</body>
+</html>

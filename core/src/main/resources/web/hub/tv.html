@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no">
+<title>Party TV</title>
+<style>
+html { background: #0c201b; }
+/* Hold the screen back until its first real data has been drawn, so a half-built screen never flashes up.
+   The animation is only a fallback: if no data arrives, the screen shows itself after 2.5 s anyway. */
+body { opacity: 0; -webkit-animation: ptvShow 0s 2.5s forwards; animation: ptvShow 0s 2.5s forwards; }
+body.ptv-ready { opacity: 1; -webkit-animation: none; animation: none; }
+@-webkit-keyframes ptvShow { to { opacity: 1; } } @keyframes ptvShow { to { opacity: 1; } }
+
+/* 1rem is 100px on a 1920x1080 screen; fit() rescales it for any other viewport. It starts small on purpose: a 19.2rem stage
+   wider than the viewport makes the WebView zoom out, which inflates innerWidth and leaves fit() about 1.5x too big. */
+html { font-size: 10px; }
+html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0c201b; }
+body { color: #f3eee2; font-family: Roboto, "Noto Sans Devanagari", "Nirmala UI", "Segoe UI", Arial, sans-serif; font-size: .36rem; }
+::-webkit-scrollbar { display: none; }
+.hidden { display: none !important; }
+
+#stage { position: absolute; left: 50%; top: 50%; width: 19.2rem; height: 10.8rem; margin: -5.4rem 0 0 -9.6rem; overflow: hidden;
+  background: #0c201b; background: radial-gradient(ellipse at 40% 45%, #17403a 0, #0c201b 62%, #0c201b 100%); }
+
+#head { position: absolute; left: .7rem; top: 1rem; width: 13.7rem; height: 1.7rem; display: -webkit-flex; display: flex;
+  -webkit-align-items: center; align-items: center; }
+#mark { width: 1.45rem; height: 1.45rem; -webkit-flex: none; flex: none; }
+#headText { margin-left: .38rem; }
+#headText h1 { margin: 0; font-family: Georgia, "Noto Serif", "Droid Serif", serif; font-style: italic; font-size: 1.2rem; line-height: 1.1; font-weight: 700; color: #d9b26a; }
+#headText p { margin: .06rem 0 0; font-size: .44rem; line-height: 1.2; color: #f3eee2; }
+
+/* The tiles sit in a clipped window, and the grid inside slides so a focused tile in a lower row comes into view. */
+#tilesWin { position: absolute; left: .55rem; top: 2.95rem; width: 14rem; height: 7.2rem; overflow: hidden; }
+#tiles { position: absolute; left: 0; top: 0; width: 100%; -webkit-transition: -webkit-transform .2s ease-out; transition: transform .2s ease-out; }
+.tile { position: absolute; box-sizing: border-box; overflow: hidden; background: #143630; border: .05rem solid #2f5c52;
+  color: #f3eee2; -webkit-transition: -webkit-transform .12s ease-out; transition: transform .12s ease-out; }
+.tile .art { position: absolute; left: 0; right: 0; top: 0; height: 58%; background: #143630; }
+.tile .art svg { position: absolute; left: 50%; top: 50%; width: 2.9rem; height: 2.9rem; margin: -1.45rem 0 0 -1.45rem; }
+.tile .txt { position: absolute; left: .32rem; right: .32rem; top: 62%; bottom: .14rem; overflow: hidden; }
+.tile .t { font-family: Georgia, "Noto Serif", "Droid Serif", serif; font-size: .82rem; line-height: 1.12; font-weight: 700; color: #d9b26a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .s { margin-top: .08rem; font-size: .42rem; line-height: 1.22; color: #f3eee2; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.tile.small .art svg { width: 1.3rem; height: 1.3rem; margin: -.65rem 0 0 -.65rem; }
+.tile.small .t { font-size: .33rem; }
+.tile.small .art { height: 50%; }
+.tile.small .txt { top: 53%; }
+.tile.small .s { font-size: .26rem; }
+/* Three tiles in a row are narrow: titles get two lines so names like Accent Wheel are not cut. */
+.tile.tall .art { height: 50%; }
+.tile.tall .txt { top: 53%; }
+.tile.tall .t { white-space: normal; }
+/* Two rows leave tiles short and wide, so the picture sits beside the text and neither can cover the other. */
+.tile.row .art { right: auto; bottom: 0; height: auto; width: 31%; }
+.tile.row .art svg { width: 1.8rem; height: 1.8rem; margin: -.9rem 0 0 -.9rem; }
+.tile.row .txt { left: 33%; right: .18rem; top: 0; bottom: 0; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column;
+  -webkit-justify-content: center; justify-content: center; }
+.tile.row .t { font-size: .66rem; line-height: 1.1; white-space: normal; }
+.tile.row .s { margin-top: .1rem; font-size: .36rem; }
+/* Six tiles: three narrow columns, so the picture goes back on top. */
+.tile.six .art { right: 0; bottom: auto; width: auto; height: 38%; }
+.tile.six .art svg { width: 1.25rem; height: 1.25rem; margin: -.625rem 0 0 -.625rem; }
+.tile.six .txt { left: .2rem; right: .2rem; top: 41%; bottom: .08rem; display: block; }
+.tile.six .t { font-size: .4rem; line-height: 1.1; white-space: normal; }
+.tile.six .s { margin-top: .05rem; font-size: .27rem; }
+.tile.focus { border-color: #f3eee2; background: #1d4a41; -webkit-transform: scale(1.035); transform: scale(1.035); }
+.tile.focus:after { content: ""; position: absolute; left: 0; top: 0; right: 0; bottom: 0; border: .1rem solid #d9b26a; }
+.tile.focus .art { background: #1d4a41; }
+.tile.opening { background: #2a5a4f; }
+
+#side { position: absolute; left: 14.85rem; top: 1rem; width: 3.95rem; height: 9.15rem; text-align: center; }
+#qrBox { box-sizing: border-box; margin: 1.2rem auto 0; width: 3.65rem; height: 3.65rem; background: #fff; padding: .14rem; border: .06rem solid #d9b26a; }
+#qrBox img { display: block; width: 100%; height: 100%; }
+#scan { margin-top: .26rem; font-size: .5rem; line-height: 1.2; font-weight: 700; }
+#joinText { margin-top: .16rem; font-size: .3rem; line-height: 1.25; color: #d9b26a; word-wrap: break-word; }
+#offlineBox { margin-top: 1.2rem; padding: .3rem; border: .04rem solid #d9b26a; font-size: .42rem; line-height: 1.35; }
+#keys { position: absolute; left: 0; right: 0; bottom: .1rem; font-size: .3rem; line-height: 1.3; color: #a9bfb7; }
+
+#msg { position: absolute; left: .55rem; top: 2.95rem; width: 14rem; height: 7.2rem; display: -webkit-flex; display: flex;
+  -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; font-size: .7rem; color: #d9b26a; }
+#reconnect { position: absolute; left: 0; right: 0; bottom: 0; padding: .16rem; text-align: center; background: #000; color: #d9b26a; font-size: .46rem; }
+
+</style>
+</head>
+<body>
+<div id="stage">
+
+  <div id="head">
+    <svg id="mark" viewBox="0 0 200 200" aria-hidden="true"><defs><radialGradient id="chipFace" cx="38%" cy="32%" r="80%"><stop offset="0" stop-color="#f0d9a0"/><stop offset=".55" stop-color="#d9b26a"/><stop offset="1" stop-color="#b38b45"/></radialGradient></defs><circle cx="100" cy="100" r="96" fill="url(#chipFace)"/><circle cx="100" cy="100" r="86" fill="none" stroke="#c7834f" stroke-width="17" stroke-dasharray="22.4 45.9" stroke-dashoffset="11.2" transform="rotate(-90 100 100)"/><circle cx="100" cy="100" r="64" fill="#0c201b"/><circle cx="100" cy="100" r="57" fill="none" stroke="#d9b26a" stroke-width="2" stroke-dasharray="3 6"/><path d="M100 58 C104 86 114 96 142 100 C114 104 104 114 100 142 C96 114 86 104 58 100 C86 96 96 86 100 58 Z" fill="#f3eee2"/><circle cx="132" cy="70" r="5" fill="#f0d9a0"/><circle cx="70" cy="132" r="3.5" fill="#c7834f"/></svg>
+    <div id="headText">
+      <h1>Party TV</h1>
+      <p>Pick a game. Everyone plays from their phone.</p>
+    </div>
+  </div>
+
+  <div id="tilesWin"><div id="tiles"></div></div>
+  <div id="msg">Getting things ready...</div>
+
+  <div id="side">
+    <div id="qrBox"><img id="qr" alt=""></div>
+    <div id="scan">Scan to choose on your phone</div>
+    <div id="joinText"></div>
+    <div id="offlineBox" class="hidden"></div>
+    <div id="keys">Use the remote: arrows to move, OK to open</div>
+  </div>
+
+  <div id="reconnect" class="hidden">Reconnecting...</div>
+</div>
+
+<script src="/shared/hub-client.js"></script>
+<script>
+(function () {
+  var POLL_MS = 1500;
+  var FAIL_LIMIT = 2;
+  var PAGE_DEAD_MS = 20000;
+  var OPEN_RESET_MS = 5000;
+  var WIN_W = 14, WIN_H = 7.2, GAP = .3; // Tile window and spacing, in rem.
+
+  // New apps may name one of these icons in apps.json. Anything else gets the star. These strings are fixed here,
+  // so setting them as markup is safe; all text from the server goes in through textContent.
+  var STAR = '<svg viewBox="0 0 100 100"><path d="M50 10 L61 38 L90 40 L67 59 L75 88 L50 71 L25 88 L33 59 L10 40 L39 38 Z" fill="#d9b26a"/></svg>';
+  var ICONS = {
+    speech: '<svg viewBox="0 0 100 100"><path d="M10 16 H72 Q82 16 82 26 V58 Q82 68 72 68 H40 L22 86 V68 H20 Q10 68 10 58 Z" fill="#d9b26a"/><path d="M26 34 H66 M26 50 H54" stroke="#143630" stroke-width="6" stroke-linecap="round"/></svg>',
+    film: '<svg viewBox="0 0 100 100"><rect x="10" y="22" width="80" height="56" rx="6" fill="#d9b26a"/><path d="M28 22 V78 M72 22 V78" stroke="#143630" stroke-width="5"/><path d="M16 32 H22 M16 46 H22 M16 60 H22 M78 32 H84 M78 46 H84 M78 60 H84" stroke="#143630" stroke-width="6"/><circle cx="50" cy="50" r="9" fill="#8e4433"/></svg>',
+    charades: '<svg viewBox="0 0 100 100">' +
+      '<circle cx="30" cy="26" r="12" fill="#d9b26a"/><path d="M30 40 V70 M30 70 L18 92 M30 70 L42 92 M30 48 L8 30 M30 48 L52 30" stroke="#d9b26a" stroke-width="7" stroke-linecap="round" fill="none"/>' +
+      '<circle cx="74" cy="52" r="11" fill="#c7834f"/><path d="M74 64 V92 M74 74 L60 66 M74 74 L88 66" stroke="#c7834f" stroke-width="7" stroke-linecap="round" fill="none"/>' +
+      '<path d="M64 12 Q64 4 74 4 Q84 4 84 12 Q84 18 76 22 V28" stroke="#f3eee2" stroke-width="6" stroke-linecap="round" fill="none"/><circle cx="76" cy="36" r="3.5" fill="#f3eee2"/>' +
+      '</svg>',
+    mic: '<svg viewBox="0 0 100 100">' +
+      '<path d="M67 16 L84 33 L46 67 L33 54Z" fill="#a9bfb7"/>' +
+      '<circle cx="72" cy="27" r="19" fill="#d9b26a"/>' +
+      '<path d="M60 15 L84 39 M67 11 L88 32" stroke="#9a6a3c" stroke-width="3" fill="none"/>' +
+      '<path d="M46 67 L33 54 L14 78 Q10 84 15 88 Q20 92 25 87Z" fill="#c7834f"/>' +
+      '<circle cx="14" cy="24" r="4" fill="#d9b26a"/><circle cx="30" cy="12" r="3" fill="#f3eee2"/><circle cx="26" cy="34" r="3" fill="#c7834f"/>' +
+      '</svg>',
+    pencil: '<svg viewBox="0 0 100 100">' +
+      '<rect x="8" y="14" width="84" height="72" fill="#f3eee2"/>' +
+      '<path d="M18 70 C30 50 38 76 50 58" stroke="#8e4433" stroke-width="5" fill="none" stroke-linecap="round"/>' +
+      '<path d="M50 58 L78 22 L90 32 L60 68 L46 72Z" fill="#d9b26a" stroke="#9a6a3c" stroke-width="3" stroke-linejoin="round"/>' +
+      '</svg>',
+    wheel: '<svg viewBox="0 0 100 100">' +
+      '<circle cx="50" cy="54" r="42" fill="#d9b26a"/>' +
+      '<path d="M50 54 L50 16 A38 38 0 0 1 83 35Z" fill="#c7834f"/>' +
+      '<path d="M50 54 L83 35 A38 38 0 0 1 83 73Z" fill="#f3eee2"/>' +
+      '<path d="M50 54 L83 73 A38 38 0 0 1 50 92Z" fill="#8e4433"/>' +
+      '<path d="M50 54 L50 92 A38 38 0 0 1 17 73Z" fill="#c7834f"/>' +
+      '<path d="M50 54 L17 73 A38 38 0 0 1 17 35Z" fill="#1d4a41"/>' +
+      '<path d="M50 54 L17 35 A38 38 0 0 1 50 16Z" fill="#e8c98a"/>' +
+      '<circle cx="50" cy="54" r="9" fill="#0c201b"/>' +
+      '<path d="M40 2 H60 L50 22Z" fill="#f3eee2" stroke="#0c201b" stroke-width="2"/>' +
+      '</svg>'
+  };
+
+  function $(id) { return document.getElementById(id); }
+  function show(id, on) {
+    var el = $(id);
+    el.className = el.className.replace(/(^| )hidden( |$)/, ' ').replace(/^ +| +$/g, '') + (on ? '' : ' hidden');
+  }
+  function now() { return new Date().getTime(); }
+
+  function fit() {
+    var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    if (s > 0) { document.documentElement.style.fontSize = (100 * s) + 'px'; }
+  }
+
+  function getJson(url, timeout, done) {
+    var xhr = new XMLHttpRequest();
+    var finished = false;
+    function finish(data) {
+      if (finished) { return; }
+      finished = true;
+      done(data);
+    }
+    try {
+      xhr.open('GET', url, true);
+      xhr.timeout = timeout;
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState !== 4) { return; }
+        var data = null;
+        if (xhr.status === 200) {
+          try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+        }
+        finish(data);
+      };
+      xhr.ontimeout = function () { finish(null); };
+      xhr.onerror = function () { finish(null); };
+      xhr.send();
+    } catch (e) {
+      finish(null);
+    }
+  }
+
+  var apps = [];
+  var appsKey = null;
+  var tileEls = [];
+  var focus = 0;
+  var cols = 1, rows = 1, rowH = 0;
+  var qrFor = null;
+  var fails = 0;
+  var lastPollAt = now();
+  var openTimer = null;
+
+  function layoutFor(n) {
+    // Up to three tiles share one tall row. More tiles go in two rows, and more than eight scroll by row.
+    if (n <= 3) { return { cols: Math.max(1, n), big: true }; }
+    if (n === 4) { return { cols: 2, big: false }; }
+    if (n <= 6) { return { cols: 3, big: false }; }
+    return { cols: 4, big: false };
+  }
+
+  function buildTiles() {
+    var box = $('tiles');
+    while (box.firstChild) { box.removeChild(box.firstChild); }
+    tileEls = [];
+    var n = apps.length;
+    var l = layoutFor(n);
+    cols = l.cols;
+    rows = Math.ceil(n / cols);
+    var w = (WIN_W - GAP * (cols - 1) - .2) / cols;
+    if (l.big && n === 1) { w = 8; }
+    var h = l.big ? WIN_H - .2 : (WIN_H - .2 - GAP) / 2;
+    rowH = h + GAP;
+    var small = !l.big && cols >= 3;
+    for (var i = 0; i < n; i++) {
+      var a = apps[i];
+      var t = document.createElement('div');
+      t.className = 'tile' + (small ? ' small' : '') + (l.big && cols === 3 ? ' tall' : '') + (!small && rows > 1 ? ' row' + (cols === 3 ? ' six' : '') : '');
+      t.style.left = (.1 + (i % cols) * (w + GAP)) + 'rem';
+      t.style.top = (.1 + Math.floor(i / cols) * rowH) + 'rem';
+      t.style.width = w + 'rem';
+      t.style.height = h + 'rem';
+      var art = document.createElement('div');
+      art.className = 'art';
+      art.innerHTML = ICONS[a.icon] || STAR;
+      var txt = document.createElement('div');
+      txt.className = 'txt';
+      var title = document.createElement('div');
+      title.className = 't';
+      title.textContent = a.title || a.id;
+      var sub = document.createElement('div');
+      sub.className = 's';
+      sub.textContent = a.subtitle || '';
+      txt.appendChild(title);
+      txt.appendChild(sub);
+      t.appendChild(art);
+      t.appendChild(txt);
+      box.appendChild(t);
+      tileEls.push(t);
+    }
+    if (focus >= n) { focus = Math.max(0, n - 1); }
+    drawFocus();
+  }
+
+  function drawFocus() {
+    for (var i = 0; i < tileEls.length; i++) {
+      var base = tileEls[i].className.replace(/ ?focus/, '');
+      tileEls[i].className = i === focus ? base + ' focus' : base;
+    }
+    // Keep the focused row in the window when there are more rows than fit.
+    var row = Math.floor(focus / cols);
+    var y = rows > 2 ? Math.min(row, rows - 2) * rowH : 0;
+    var tf = 'translateY(' + (-y) + 'rem)';
+    $('tiles').style.webkitTransform = tf;
+    $('tiles').style.transform = tf;
+  }
+
+  function onHub(h) {
+    var list = h.apps || [];
+    var key = JSON.stringify(list);
+    if (key !== appsKey) {
+      appsKey = key;
+      // Keep focus on the same app if the list changes under it.
+      var focusId = apps[focus] ? apps[focus].id : null;
+      apps = list;
+      for (var i = 0; i < apps.length; i++) {
+        if (apps[i].id === focusId) { focus = i; }
+      }
+      buildTiles();
+    }
+    show('msg', !apps.length);
+    if (!apps.length) { $('msg').textContent = 'No apps found.'; }
+
+    var url = h.joinUrl;
+    var online = !!url && url.indexOf('http') === 0;
+    show('qrBox', online);
+    show('scan', online);
+    show('joinText', online);
+    show('offlineBox', !online);
+    if (!online) {
+      $('offlineBox').textContent = url || 'Not connected to a network.';
+    } else if (qrFor !== url) {
+      qrFor = url;
+      $('joinText').textContent = url;
+      $('qr').src = '/qr.svg?u=' + encodeURIComponent(url);
+    }
+  }
+
+  function poll() {
+    getJson('/api/hub', 2500, function (data) {
+      lastPollAt = now();
+      try {
+        if (data) {
+          fails = 0; if (window.HubClient && HubClient.ready) { HubClient.ready(); }
+          onHub(data);
+        } else {
+          fails++;
+        }
+        show('reconnect', fails >= FAIL_LIMIT);
+      } catch (e) {
+        if (window.console) { console.log('Hub draw error: ' + e); }
+      }
+      setTimeout(poll, POLL_MS);
+    });
+  }
+
+  function postOpen(id, done) {
+    if (window.HubClient && HubClient.open) {
+      HubClient.open(id, done);
+      return;
+    }
+    // The shared script failed to load: open the page directly, so the remote still works.
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/hub/open', true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState === 4 && xhr.status === 200) { location.replace('/tv/' + encodeURIComponent(id)); }
+    };
+    xhr.send(JSON.stringify({ id: id }));
+  }
+
+  function openFocused() {
+    var a = apps[focus];
+    if (!a) { return; }
+    var el = tileEls[focus];
+    el.className += ' opening';
+    if (openTimer) { clearTimeout(openTimer); }
+    // Normally the page has moved on long before this runs. If not, the tile stops looking busy and can be tried again.
+    function reset() { el.className = el.className.replace(/ ?opening/, ''); }
+    openTimer = setTimeout(reset, OPEN_RESET_MS);
+    try {
+      postOpen(a.id, function (ok) { if (!ok) { reset(); } });
+    } catch (e) {
+      reset();
+      if (window.console) { console.log('Open failed: ' + e); }
+    }
+  }
+
+  function onKey(name) {
+    var n = apps.length;
+    if (!n) { return; }
+    var next = focus;
+    if (name === 'left') { next = (focus + n - 1) % n; }
+    else if (name === 'right') { next = (focus + 1) % n; }
+    else if (name === 'up') { next = focus - cols >= 0 ? focus - cols : focus; }
+    else if (name === 'down') { next = focus + cols < n ? focus + cols : focus; }
+    else if (name === 'ok') { openFocused(); return; }
+    if (next !== focus) {
+      focus = next;
+      drawFocus();
+    }
+  }
+
+  window.onRemoteKey = function (name) {
+    try { onKey(name); } catch (e) { if (window.console) { console.log('Key error: ' + e); } }
+  };
+  var KEYS = { 37: 'left', 38: 'up', 39: 'right', 40: 'down', 13: 'ok' };
+  document.onkeydown = function (e) {
+    var name = KEYS[e.keyCode];
+    if (name) {
+      if (e.preventDefault) { e.preventDefault(); }
+      window.onRemoteKey(name);
+    }
+  };
+
+  window.onresize = fit;
+  fit();
+  if (window.HubClient) {
+    try { HubClient.start({ kind: 'tv', app: null }); } catch (e) { if (window.console) { console.log(e); } }
+  }
+  poll();
+  // Last resort, and exactly what a refresh would do. A poll always finishes within seconds, even with the server
+  // down, so a long silence means the page itself has stopped working.
+  setInterval(function () {
+    if (now() - lastPollAt > PAGE_DEAD_MS) { window.location.reload(); }
+  }, 5000);
+})();
+</script>
+</body>
+</html>

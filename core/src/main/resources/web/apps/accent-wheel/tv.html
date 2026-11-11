@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no">
+<title>Accent Wheel</title>
+<style>
+html { background: #0c201b; }
+/* Hold the screen back until its first real data has been drawn, so a half-built screen never flashes up.
+   The animation is only a fallback: if no data arrives, the screen shows itself after 2.5 s anyway. */
+body { opacity: 0; -webkit-animation: ptvShow 0s 2.5s forwards; animation: ptvShow 0s 2.5s forwards; }
+body.ptv-ready { opacity: 1; -webkit-animation: none; animation: none; }
+@-webkit-keyframes ptvShow { to { opacity: 1; } } @keyframes ptvShow { to { opacity: 1; } }
+
+/* 1rem is 100px on a 1920x1080 screen; fit() rescales it for any other viewport. It starts small on purpose: a 19.2rem stage
+   wider than the viewport makes the WebView zoom out, which inflates innerWidth and leaves fit() about 1.5x too big. */
+html { font-size: 10px; }
+html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0c201b; }
+body { color: #f3eee2; font-family: Roboto, "Noto Sans Devanagari", "Nirmala UI", "Segoe UI", Arial, sans-serif; font-size: .36rem; }
+::-webkit-scrollbar { display: none; }
+.hidden { display: none !important; }
+
+#stage { position: absolute; left: 50%; top: 50%; width: 19.2rem; height: 10.8rem; margin: -5.4rem 0 0 -9.6rem; overflow: hidden;
+  background: #0c201b; background: radial-gradient(ellipse at 50% 38%, #17403a 0, #0c201b 60%, #0c201b 100%); }
+
+/* Timer bar across the very top */
+#bar { position: absolute; left: 0; right: 0; top: 0; height: .12rem; background: #143630; }
+#barFill { width: 100%; height: 100%; background: #d9b26a; -webkit-transform-origin: 0 50%; transform-origin: 0 50%;
+  -webkit-transition: -webkit-transform .25s linear; transition: transform .25s linear; }
+#barFill.hot { background: #b4553f; }
+
+/* Top row */
+#brand { position: absolute; left: .45rem; top: .26rem; }
+#brand h1 { margin: 0; font-family: Georgia, "Noto Serif", "Droid Serif", serif; font-size: .72rem; line-height: 1.1; font-weight: 700; color: #d9b26a; white-space: nowrap; }
+#info { position: absolute; right: .45rem; top: .3rem; text-align: right; }
+#roundText { font-size: .6rem; line-height: 1.1; font-weight: 700; color: #f3eee2; white-space: nowrap; }
+#roundSub { margin-top: .06rem; font-size: .3rem; line-height: 1.2; color: #a9bfb7; white-space: nowrap; }
+#speedChip { display: inline-block; margin-top: .08rem; padding: .04rem .18rem; font-size: .34rem; line-height: 1.25; font-weight: 700; color: #0c201b; background: #d9b26a; white-space: nowrap; }
+
+/* Timer and whoever is up: the column between the wheels */
+#timer { position: absolute; left: 7.75rem; top: .3rem; width: 3.7rem; height: 2.1rem; line-height: 2.1rem; text-align: center;
+  font-size: 2rem; font-weight: 700; color: #f3eee2; }
+#timer.idle { color: #7f9a92; }
+#timer.hot { background: #b4553f; color: #fff; -webkit-animation: pulse 1s ease-in-out infinite; animation: pulse 1s ease-in-out infinite; }
+@-webkit-keyframes pulse { 50% { -webkit-transform: scale(1.07); } }
+@keyframes pulse { 50% { transform: scale(1.07); } }
+#mid { position: absolute; left: 7.4rem; top: 2.56rem; width: 4.4rem; height: 3.9rem; text-align: center; }
+#whoLabel { font-size: .32rem; line-height: 1.2; color: #a9bfb7; }
+#whoBox { height: 1.2rem; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; overflow: hidden; }
+#whoName { font-weight: 700; color: #d9b26a; line-height: 1.12; word-wrap: break-word; max-width: 100%; }
+#qrWrap { margin-top: .12rem; }
+#qrBox { box-sizing: border-box; margin: 0 auto; width: 1.5rem; height: 1.5rem; background: #fff; padding: .07rem; }
+#qrBox img { display: block; width: 100%; height: 100%; }
+#qrText { margin-top: .06rem; font-size: .26rem; line-height: 1.2; color: #f3eee2; }
+/* With no players the code is the main thing here, and what it asks for must be readable across the room. */
+#mid.noPlayers #whoLabel, #mid.noPlayers #whoBox { display: none; }
+#mid.noPlayers #qrWrap { margin-top: 0; }
+#mid.noPlayers #qrBox { width: 3rem; height: 3rem; padding: .12rem; border: .05rem solid #d9b26a; }
+#mid.noPlayers #qrText { margin-top: .08rem; font-size: .42rem; font-weight: 700; color: #f3eee2; }
+
+/* Wheels */
+.wheel { position: absolute; top: 1.28rem; width: 5.1rem; height: 5.1rem; }
+#wheelV { left: 2.25rem; }
+#wheelT { left: 11.85rem; }
+.rotor { position: absolute; left: 0; top: 0; width: 100%; height: 100%; will-change: transform; -webkit-transform: rotate(0deg); transform: rotate(0deg); }
+.rotor svg { display: block; width: 100%; height: 100%; }
+.hub { position: absolute; left: 50%; top: 50%; width: 1.7rem; height: 1.7rem; margin: -.85rem 0 0 -.85rem; border-radius: 50%; box-sizing: border-box;
+  background: #0c201b; border: .09rem solid #d9b26a; color: #d9b26a; font-size: .36rem; font-weight: 700; line-height: 1.52rem; text-align: center; letter-spacing: .01rem; }
+.pointer { position: absolute; left: 50%; top: -.16rem; width: .7rem; height: .86rem; margin-left: -.35rem;
+  -webkit-transform-origin: 50% 15%; transform-origin: 50% 15%; -webkit-transition: -webkit-transform 70ms ease-out; transition: transform 70ms ease-out; }
+.pointer svg { display: block; width: 100%; height: 100%; }
+.pointer.flap { -webkit-transform: rotate(-15deg); transform: rotate(-15deg); }
+
+/* Results, or the scoring panel, or who just scored: all in the same row */
+.result { position: absolute; top: 6.58rem; width: 8.95rem; height: 1.78rem; box-sizing: border-box; padding: .06rem .26rem; overflow: hidden;
+  background: #0c201b; border: .05rem solid #2f5c52; display: -webkit-flex; display: flex;
+  -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; text-align: center; }
+#resV { left: .45rem; }
+#resT { left: 9.8rem; }
+.result.on { border-color: #d9b26a; background: #143630; }
+.resText { line-height: 1.14; font-weight: 700; color: #f3eee2; word-wrap: break-word; max-width: 100%; }
+.result.on .resText { color: #d9b26a; }
+.result.empty .resText { color: #7f9a92; font-weight: 400; }
+.pop { -webkit-animation: pop .35s ease-out; animation: pop .35s ease-out; }
+@-webkit-keyframes pop { 0% { -webkit-transform: scale(.82); } 70% { -webkit-transform: scale(1.04); } 100% { -webkit-transform: scale(1); } }
+@keyframes pop { 0% { transform: scale(.82); } 70% { transform: scale(1.04); } 100% { transform: scale(1); } }
+
+#scorePanel { position: absolute; left: .45rem; top: 6.58rem; width: 18.3rem; height: 1.78rem; box-sizing: border-box; background: #143630; border: .05rem solid #d9b26a;
+  display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
+#scoreAsk { -webkit-flex: 1 1 0; flex: 1 1 0; min-width: 0; padding: 0 .3rem; }
+#scoreWho { font-size: .66rem; line-height: 1.15; font-weight: 700; color: #d9b26a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#scoreHow { margin-top: .06rem; font-size: .38rem; line-height: 1.2; color: #f3eee2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#picks { -webkit-flex: none; flex: none; display: -webkit-flex; display: flex; padding-right: .22rem; }
+.pick { box-sizing: border-box; width: 1.42rem; height: 1.42rem; margin-left: .16rem; line-height: 1.26rem; text-align: center; font-size: .96rem; font-weight: 700;
+  color: #f3eee2; background: #0c201b; border: .08rem solid #2f5c52; }
+.pick.focus { color: #0c201b; background: #d9b26a; border-color: #f3eee2; -webkit-transform: scale(1.08); transform: scale(1.08); }
+
+#award { position: absolute; left: .45rem; top: 6.58rem; width: 18.3rem; height: 1.78rem; box-sizing: border-box; background: #d9b26a; color: #0c201b;
+  display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; text-align: center; padding: 0 .3rem; overflow: hidden; }
+#awardText { font-weight: 700; line-height: 1.12; word-wrap: break-word; max-width: 100%; }
+
+/* What to do next */
+#hint { position: absolute; left: .45rem; right: .45rem; top: 8.44rem; height: .62rem; line-height: .62rem; text-align: center; font-size: .4rem; white-space: nowrap; overflow: hidden; color: #f3eee2; }
+#hint .key { display: inline-block; padding: 0 .14rem; height: .46rem; line-height: .46rem; margin: 0 .12rem 0 .34rem; color: #0c201b; background: #d9b26a; font-size: .3rem; font-weight: 700; vertical-align: .02rem; }
+#pageNote { position: absolute; right: .45rem; top: 8.44rem; height: .62rem; line-height: .62rem; font-size: .28rem; color: #a9bfb7; }
+
+/* Scoreboard */
+#board { position: absolute; left: .45rem; right: .45rem; top: 9.1rem; height: 1.56rem; }
+.row { display: -webkit-flex; display: flex; -webkit-justify-content: center; justify-content: center; }
+.chip { box-sizing: border-box; -webkit-flex: 1 1 0; flex: 1 1 0; min-width: 0; margin: 0 .05rem; background: #143630; border: .04rem solid #2f5c52; overflow: hidden; position: relative; }
+.chip .name, .chip .score, .chip .rank { display: block; white-space: nowrap; }
+.chip .name { overflow: hidden; text-overflow: ellipsis; color: #f3eee2; }
+.chip.cur { background: #d9b26a; border-color: #f3eee2; }
+.chip.cur .name, .chip.cur .score, .chip.cur .rank { color: #0c201b; }
+.chip .score { font-weight: 700; color: #d9b26a; }
+.chip .rank { color: #a9bfb7; }
+/* Up to eight players: one row of tall chips, name above score. */
+#board.one .row { height: 1.5rem; margin-top: .03rem; }
+#board.one .chip { max-width: 4.6rem; padding: .08rem .16rem; }
+#board.one .chip .rank { position: absolute; right: .14rem; top: .1rem; font-size: .3rem; }
+#board.one .chip .name { font-size: .42rem; line-height: 1.2; font-weight: 700; padding-right: .3rem; }
+#board.one .chip .score { font-size: .72rem; line-height: 1.12; }
+/* More: two rows of short chips, all on one line. */
+#board.two .row { height: .72rem; margin-bottom: .08rem; }
+#board.two .chip { padding: 0 .1rem; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
+#board.two .chip .rank { -webkit-flex: none; flex: none; font-size: .24rem; margin-right: .07rem; }
+#board.two .chip .name { -webkit-flex: 1 1 0; flex: 1 1 0; min-width: 0; font-size: .32rem; line-height: 1.3; }
+#board.two .chip .score { -webkit-flex: none; flex: none; margin-left: .07rem; font-size: .42rem; line-height: 1.2; }
+
+#reconnect { position: absolute; left: 0; right: 0; bottom: 0; padding: .16rem; text-align: center; background: #000; color: #d9b26a; font-size: .46rem; }
+
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bar"><div id="barFill"></div></div>
+
+  <div id="brand"><h1>Accent Wheel</h1></div>
+  <div id="info">
+    <div id="roundText">Round 1</div>
+    <div id="roundSub" class="hidden">Warm-up round</div>
+    <div id="speedChip" class="hidden">Speed Round</div>
+  </div>
+
+  <div id="timer" class="idle">45</div>
+
+  <div class="wheel" id="wheelV">
+    <div class="rotor" id="rotorV"><svg id="svgV" viewBox="0 0 1000 1000"></svg></div>
+    <div class="hub">VOICE</div>
+    <div class="pointer" id="ptrV"><svg viewBox="0 0 70 86"><path d="M4 4 H66 L35 84Z" fill="#f3eee2" stroke="#0c201b" stroke-width="5" stroke-linejoin="round"/></svg></div>
+  </div>
+  <div class="wheel" id="wheelT">
+    <div class="rotor" id="rotorT"><svg id="svgT" viewBox="0 0 1000 1000"></svg></div>
+    <div class="hub">TASK</div>
+    <div class="pointer" id="ptrT"><svg viewBox="0 0 70 86"><path d="M4 4 H66 L35 84Z" fill="#f3eee2" stroke="#0c201b" stroke-width="5" stroke-linejoin="round"/></svg></div>
+  </div>
+
+  <div id="mid">
+    <div id="whoLabel">Up now</div>
+    <div id="whoBox"><div id="whoName"></div></div>
+    <div id="qrWrap" class="hidden">
+      <div id="qrBox"><img id="qr" alt=""></div>
+      <div id="qrText"></div>
+    </div>
+  </div>
+
+  <div class="result empty" id="resV"><div class="resText" id="resVText"></div></div>
+  <div class="result empty" id="resT"><div class="resText" id="resTText"></div></div>
+
+  <div id="scorePanel" class="hidden">
+    <div id="scoreAsk"><div id="scoreWho"></div><div id="scoreHow">Hands up, everyone: 1 to 5 fingers</div></div>
+    <div id="picks"></div>
+  </div>
+  <div id="award" class="hidden"><div id="awardText"></div></div>
+
+  <div id="hint"></div>
+  <div id="pageNote" class="hidden"></div>
+  <div id="board" class="one"></div>
+  <div id="reconnect" class="hidden">Reconnecting...</div>
+</div>
+
+<script src="/shared/hub-client.js"></script>
+<script>
+(function () {
+  var APP = 'accent-wheel';
+  var STATE_URL = '/api/app/' + APP + '/state';
+  var ACTION_URL = '/api/app/' + APP + '/action';
+  var POLL_MS = 500;
+  var FAIL_LIMIT = 2;
+  var PAGE_DEAD_MS = 20000;
+  var AWARD_SHOW_MS = 6000;
+  var BOARD_PAGE_MS = 5000;
+  var ACTION_DEAD_MS = 4000;
+  var EVERYONE = 'Everyone';
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+  var COLOURS = ['#8e4433', '#d9b26a', '#1d4a41', '#c7834f'];
+  var INKS = ['#f3eee2', '#0c201b', '#f3eee2', '#0c201b'];
+  var EASE = [0.13, 0.72, 0.12, 1]; // The wheel's slow-down curve. The CSS transition and the tick sounds both use it.
+
+  function $(id) { return document.getElementById(id); }
+  function now() { return new Date().getTime(); }
+  function setText(el, text) {
+    if (el.__text !== text) { el.__text = text; el.textContent = text; }
+  }
+  function show(id, on) {
+    var el = $(id);
+    var has = /(^| )hidden( |$)/.test(el.className);
+    if (on && has) {
+      el.className = el.className.replace(/(^| )hidden( |$)/, ' ').replace(/^ +| +$/g, '');
+    } else if (!on && !has) {
+      el.className = el.className ? el.className + ' hidden' : 'hidden';
+    }
+  }
+  function setClass(el, cls) {
+    if (el.className !== cls) { el.className = cls; }
+  }
+
+  var remPx = 100;
+  var fitted = []; // Text boxes to measure again when the screen size changes.
+
+  function fit() {
+    var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    if (s > 0) {
+      document.documentElement.style.fontSize = (100 * s) + 'px';
+      remPx = 100 * s;
+    }
+    for (var i = 0; i < fitted.length; i++) {
+      var el = fitted[i];
+      el.__fitKey = null;
+      fitText(el, el.__text || '', el.__fitMax, el.__fitMin);
+    }
+  }
+
+  // Sets the text at the largest size that fits its parent box, so long text is never clipped.
+  function fitText(el, text, maxRem, minRem) {
+    var key = text + '|' + remPx + '|' + maxRem;
+    if (el.__fitKey === key) { return; }
+    if (!el.__fitReg) {
+      el.__fitReg = true;
+      fitted.push(el);
+    }
+    el.__fitMax = maxRem;
+    el.__fitMin = minRem;
+    setText(el, text);
+    var box = el.parentNode;
+    var cs = window.getComputedStyle(box);
+    var maxH = box.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    var maxW = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    if (maxH <= 0 || maxW <= 0) { return; } // Hidden right now: leaves the key unset, so the next draw measures it.
+    el.__fitKey = key;
+    var size = maxRem;
+    while (size > minRem) {
+      el.style.fontSize = size + 'rem';
+      if (el.offsetHeight <= maxH && el.scrollWidth <= maxW + 1) { return; }
+      size = Math.round((size - .04) * 100) / 100;
+    }
+    el.style.fontSize = minRem + 'rem';
+  }
+
+  // --- networking ---
+  function request(method, url, body, timeout, done) {
+    var xhr = new XMLHttpRequest();
+    var finished = false;
+    function finish(data) {
+      if (finished) { return; }
+      finished = true;
+      done(data);
+    }
+    try {
+      xhr.open(method, url, true);
+      xhr.timeout = timeout;
+      if (body) { xhr.setRequestHeader('Content-Type', 'application/json'); }
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState !== 4) { return; }
+        var data = null;
+        if (xhr.status === 200) {
+          try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+        }
+        finish(data);
+      };
+      xhr.ontimeout = function () { finish(null); };
+      xhr.onerror = function () { finish(null); };
+      xhr.send(body ? JSON.stringify(body) : null);
+    } catch (e) {
+      finish(null);
+    }
+  }
+
+  // --- sound: all of it optional. A TV with no working audio simply stays quiet. ---
+  var audio = null;
+  var audioFailed = false;
+  function ctx() {
+    if (audioFailed) { return null; }
+    try {
+      if (!audio) {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) { audioFailed = true; return null; }
+        audio = new AC();
+      }
+      if (audio.state === 'suspended' && audio.resume) {
+        var p = audio.resume();
+        if (p && p['catch']) { p['catch'](function () {}); }
+      }
+      return audio;
+    } catch (e) {
+      audioFailed = true;
+      return null;
+    }
+  }
+  function tone(freq, ms, type, gain, delayMs) {
+    try {
+      var c = ctx();
+      if (!c) { return; }
+      var t = c.currentTime + (delayMs || 0) / 1000;
+      var o = c.createOscillator();
+      var g = c.createGain();
+      o.type = type;
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(gain, t);
+      g.gain.exponentialRampToValueAtTime(0.0008, t + ms / 1000);
+      o.connect(g);
+      g.connect(c.destination);
+      o.start(t);
+      o.stop(t + ms / 1000 + .02);
+    } catch (e) {
+      if (window.console) { console.log('Sound error: ' + e); }
+    }
+  }
+  function soundTick() { tone(1500, 32, 'square', .05); }
+  function soundChime() {
+    tone(784, 260, 'triangle', .28);
+    tone(988, 280, 'triangle', .28, 110);
+    tone(1319, 520, 'triangle', .3, 220);
+  }
+  function soundBeep() { tone(880, 170, 'square', .14); }
+  function soundBuzzer() {
+    tone(160, 800, 'sawtooth', .3);
+    tone(120, 800, 'sawtooth', .22);
+  }
+  function soundPoints() {
+    tone(659, 130, 'triangle', .26);
+    tone(880, 130, 'triangle', .26, 110);
+    tone(1175, 320, 'triangle', .28, 220);
+  }
+
+  // --- wheel maths ---
+  // cubic-bezier as CSS computes it: find the curve parameter for this moment in time, then read off the progress.
+  function bez(a, b, u) { var v = 1 - u; return 3 * v * v * u * a + 3 * v * u * u * b + u * u * u; }
+  function ease(p) {
+    if (p <= 0) { return 0; }
+    if (p >= 1) { return 1; }
+    var lo = 0, hi = 1, u = p;
+    for (var i = 0; i < 14; i++) {
+      u = (lo + hi) / 2;
+      if (bez(EASE[0], EASE[2], u) < p) { lo = u; } else { hi = u; }
+    }
+    return bez(EASE[1], EASE[3], u);
+  }
+
+  function makeWheel(key, stateKey, rotorId, svgId, ptrId, turns) {
+    return { key: key, stateKey: stateKey, rotor: $(rotorId), svg: $(svgId), ptr: $(ptrId), turns: turns,
+             items: [], sig: null, angle: 0, from: 0, to: 0, wedges: [], labels: [], lit: -1, lastSlice: null };
+  }
+  var wheelV = makeWheel('voice', 'voices', 'rotorV', 'svgV', 'ptrV', 7);
+  var wheelT = makeWheel('task', 'tasks', 'rotorT', 'svgT', 'ptrT', 9);
+  var wheels = [wheelV, wheelT];
+
+  function svgEl(name, attrs) {
+    var el = document.createElementNS(SVG_NS, name);
+    for (var k in attrs) { if (attrs.hasOwnProperty(k)) { el.setAttribute(k, attrs[k]); } }
+    return el;
+  }
+
+  // The first words of a slice, short enough to fit along a wedge. The full text shows below the wheel once landed.
+  function shortLabel(text, max) {
+    var t = (text || '').replace(/^\s+|\s+$/g, '');
+    if (t.length <= max) { return t; }
+    var words = t.split(/\s+/);
+    var out = '';
+    for (var i = 0; i < words.length; i++) {
+      if ((out ? out.length + 1 : 0) + words[i].length > max) { break; }
+      out = out ? out + ' ' + words[i] : words[i];
+    }
+    if (!out) { out = t.substring(0, max); }
+    return out.replace(/[\s\/,.:;(-]+$/, '').replace(/ (a|an|the|for|on|at|to|in|of|with|how|who's)$/i, '');
+  }
+
+  function buildWheel(w, items) {
+    var svg = w.svg;
+    while (svg.firstChild) { svg.removeChild(svg.firstChild); }
+    w.items = items;
+    w.wedges = [];
+    w.labels = [];
+    w.lit = -1;
+    var n = items.length;
+    var C = 500, R = 482;
+    var frag = document.createDocumentFragment();
+    frag.appendChild(svgEl('circle', { cx: C, cy: C, r: 498, fill: '#0c201b' }));
+    if (n < 2) {
+      frag.appendChild(svgEl('circle', { cx: C, cy: C, r: R, fill: COLOURS[0] }));
+    }
+    var step = n ? 360 / n : 360;
+    // Text runs from the rim to the hub, which leaves room for about this many characters at each size.
+    var fontSize = n <= 14 ? 40 : n <= 24 ? 38 : 30;
+    var maxChars = n <= 14 ? 13 : n <= 24 ? 14 : 17;
+    var i;
+    for (i = 0; n >= 2 && i < n; i++) {
+      var a0 = i * step * Math.PI / 180;
+      var a1 = (i + 1) * step * Math.PI / 180;
+      var x0 = C + R * Math.sin(a0), y0 = C - R * Math.cos(a0);
+      var x1 = C + R * Math.sin(a1), y1 = C - R * Math.cos(a1);
+      // With an odd remainder the last wedge would match the first, so it takes a colour that differs from both neighbours.
+      var c = i % COLOURS.length;
+      if (i === n - 1 && c === 0) { c = 1; }
+      var path = svgEl('path', { d: 'M' + C + ' ' + C + 'L' + x0.toFixed(1) + ' ' + y0.toFixed(1) +
+          'A' + R + ' ' + R + ' 0 ' + (step > 180 ? 1 : 0) + ' 1 ' + x1.toFixed(1) + ' ' + y1.toFixed(1) + 'Z', fill: COLOURS[c] });
+      frag.appendChild(path);
+      w.wedges.push({ el: path, fill: COLOURS[c], ink: INKS[c] });
+      var label = null;
+      if (n <= 40) {
+        var mid = (i + .5) * step - 90;
+        label = svgEl('text', { x: C + R - 30, y: C, dy: '.35em', 'text-anchor': 'end', fill: INKS[c], 'font-size': fontSize, 'font-weight': 700,
+          transform: 'rotate(' + mid.toFixed(2) + ' ' + C + ' ' + C + ')' });
+        label.textContent = shortLabel(items[i].text, maxChars);
+        frag.appendChild(label);
+      }
+      w.labels.push(label);
+    }
+    // Gold rim, with a peg at each slice boundary for the pointer to click over.
+    frag.appendChild(svgEl('circle', { cx: C, cy: C, r: R + 4, fill: 'none', stroke: '#d9b26a', 'stroke-width': 16 }));
+    for (i = 0; n >= 2 && n <= 60 && i < n; i++) {
+      var a = i * step * Math.PI / 180;
+      frag.appendChild(svgEl('circle', { cx: (C + (R + 4) * Math.sin(a)).toFixed(1), cy: (C - (R + 4) * Math.cos(a)).toFixed(1), r: 11, fill: '#f3eee2' }));
+    }
+    svg.appendChild(frag);
+  }
+
+  function setRotation(w, deg) {
+    var tf = 'rotate(' + deg.toFixed(2) + 'deg)';
+    w.rotor.style.webkitTransform = tf;
+    w.rotor.style.transform = tf;
+  }
+  function setTransition(w, ms) {
+    var v = ms > 0 ? 'transform ' + ms + 'ms cubic-bezier(' + EASE.join(',') + ')' : 'none';
+    w.rotor.style.webkitTransition = ms > 0 ? '-webkit-' + v : 'none';
+    w.rotor.style.transition = v;
+  }
+
+  function indexOf(w, item) {
+    if (!item) { return -1; }
+    for (var i = 0; i < w.items.length; i++) {
+      if (w.items[i].id === item.id) { return i; }
+    }
+    return -1;
+  }
+
+  // Where a wheel must end up for this slice to sit under the pointer at the top. The landing is a little off centre so
+  // it looks natural, and comes from spinId so a reload lands in the same place.
+  function restAngle(w, idx, spinId) {
+    var step = 360 / w.items.length;
+    var jitter = (((spinId || 0) * 7919 + idx * 31) % 100) / 100 - .5;
+    return -((idx + .5) * step + jitter * step * .5);
+  }
+
+  function norm(deg) { return ((deg % 360) + 360) % 360; }
+
+  function lightWedge(w, idx) {
+    if (w.lit === idx) { return; }
+    if (w.lit >= 0 && w.wedges[w.lit]) {
+      w.wedges[w.lit].el.setAttribute('fill', w.wedges[w.lit].fill);
+      if (w.labels[w.lit]) { w.labels[w.lit].setAttribute('fill', w.wedges[w.lit].ink); }
+    }
+    w.lit = idx;
+    if (idx >= 0 && w.wedges[idx]) {
+      w.wedges[idx].el.setAttribute('fill', '#f3eee2');
+      if (w.labels[idx]) { w.labels[idx].setAttribute('fill', '#8e4433'); }
+    }
+  }
+
+  function snapWheel(w, item, spinId) {
+    var idx = indexOf(w, item);
+    setTransition(w, 0);
+    if (idx >= 0) { w.angle = restAngle(w, idx, spinId); }
+    w.from = w.to = w.angle;
+    setRotation(w, w.angle);
+  }
+
+  // --- spinning ---
+  var spin = null; // {id, start, end, duration} while a wheel animation is running.
+  var spinTimer = null;
+  var tickTimer = null;
+  var lastTickAt = 0;
+
+  function startSpin(s, resuming) {
+    var left = Math.max(0, s.phaseMsLeft || 0);
+    var total = s.spinMs || 4500;
+    if (resuming && left < 250) {
+      // Too little left to be worth animating.
+      snapWheel(wheelV, s.voice, s.spinId);
+      snapWheel(wheelT, s.task, s.spinId);
+      return;
+    }
+    var i;
+    for (i = 0; i < wheels.length; i++) {
+      var w = wheels[i];
+      var item = s[w.key];
+      var idx = indexOf(w, item);
+      lightWedge(w, -1);
+      if (idx < 0) { continue; }
+      var rest = restAngle(w, idx, s.spinId);
+      var to, from;
+      if (resuming) {
+        // A reload in the middle of a spin: pick up about where the spin would be by now, not from the beginning.
+        to = rest + w.turns * 360;
+        from = to - w.turns * 360 * (1 - ease(1 - left / total));
+      } else {
+        from = w.angle;
+        to = from + w.turns * 360 + norm(rest - from);
+      }
+      w.from = from;
+      w.to = to;
+      w.angle = to;
+      w.lastSlice = null;
+      setTransition(w, 0);
+      setRotation(w, from);
+    }
+    // Commit the starting position before the transition is applied, or the browser would skip straight to the end.
+    void wheelV.rotor.offsetWidth;
+    for (i = 0; i < wheels.length; i++) {
+      if (wheels[i].from !== wheels[i].to) {
+        setTransition(wheels[i], left);
+        setRotation(wheels[i], wheels[i].to);
+      }
+    }
+    spin = { id: s.spinId, start: now(), duration: left, end: now() + left };
+    clearTimers();
+    tickTimer = setInterval(guarded(tickLoop), 40);
+    spinTimer = setTimeout(guarded(onSpinDone), left + 40);
+  }
+
+  function clearTimers() {
+    if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+    if (spinTimer) { clearTimeout(spinTimer); spinTimer = null; }
+  }
+
+  function tickLoop() {
+    if (!spin) { return; }
+    var p = (now() - spin.start) / spin.duration;
+    var e = ease(p);
+    var ticked = false;
+    for (var i = 0; i < wheels.length; i++) {
+      var w = wheels[i];
+      if (w.items.length < 2 || w.from === w.to) { continue; }
+      var deg = w.from + (w.to - w.from) * e;
+      var slice = Math.floor(deg / (360 / w.items.length));
+      if (w.lastSlice !== null && slice !== w.lastSlice) {
+        ticked = true;
+        flap(w);
+      }
+      w.lastSlice = slice;
+    }
+    var t = now();
+    if (ticked && t - lastTickAt >= 65) {
+      lastTickAt = t;
+      soundTick();
+    }
+  }
+
+  function flap(w) {
+    w.ptr.className = 'pointer flap';
+    if (w.flapTimer) { clearTimeout(w.flapTimer); }
+    w.flapTimer = setTimeout(function () { w.ptr.className = 'pointer'; }, 60);
+  }
+
+  function onSpinDone() {
+    clearTimers();
+    spin = null;
+    if (state && state.phase !== 'ready') { soundChime(); }
+    // Show the result the moment the wheels stop rather than at the next regular poll.
+    pollNow();
+  }
+
+  // --- applying state ---
+  var state = null;
+  var lastSpinId = null;
+  var lastPhase = null;
+  var lastSeconds = null;
+  var fails = 0;
+  var lastPollAt = now();
+  var lastServerNow = 0;
+  var pick = 3;
+  var pickFor = null;
+  var lastAwardKey = null;
+  var awardUntil = 0;
+  var awardSeenFirst = false;
+  var boardPage = 0;
+  var boardPages = 1;
+  var boardKey = null;
+  var perfEndAt = 0; // When the running timer ends, by this device's clock.
+  var hubJoinUrl = null;
+  var qrFor = null;
+
+  function sigOf(items) {
+    var out = [];
+    for (var i = 0; i < items.length; i++) { out.push(items[i].id + '=' + items[i].text); }
+    return out.join('|');
+  }
+
+  function players(s) { return s.players || []; }
+
+  function currentPlayer(s) {
+    var list = players(s);
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === s.currentPlayerId) { return list[i]; }
+    }
+    return null;
+  }
+
+  function currentName(s) {
+    var p = currentPlayer(s);
+    return p ? p.name : (players(s).length ? '' : EVERYONE);
+  }
+
+  function isShowingChoice(phase) {
+    return phase === 'landed' || phase === 'performing' || phase === 'scoring';
+  }
+
+  function applyState(s) {
+    // A slow poll can arrive after the reply to a later action. Never step backwards. A big jump means a new clock.
+    if (s.serverNow && lastServerNow && s.serverNow < lastServerNow && lastServerNow - s.serverNow < 5000) { return; }
+    lastServerNow = s.serverNow || 0;
+    var first = lastSpinId === null;
+    var prevPhase = lastPhase;
+    state = s;
+
+    // A slice can be added while the wheels spin. Redraw once they have stopped, so nothing jumps.
+    for (var i = 0; i < wheels.length; i++) {
+      var w = wheels[i];
+      var items = s[w.stateKey] || [];
+      var sig = sigOf(items);
+      if (sig !== w.sig && !spin) {
+        w.sig = sig;
+        buildWheel(w, items);
+        snapWheel(w, isShowingChoice(s.phase) || s.phase === 'spinning' ? s[w.key] : null, s.spinId);
+      }
+    }
+
+    if (s.spinId !== lastSpinId) {
+      lastSpinId = s.spinId;
+      if (s.phase === 'spinning') {
+        startSpin(s, first);
+      } else {
+        // The whole spin happened while this page was away: no replay, just show where it landed.
+        snapWheel(wheelV, s.voice, s.spinId);
+        snapWheel(wheelT, s.task, s.spinId);
+      }
+    } else if (s.phase !== 'spinning' && spin) {
+      if (s.phase === 'ready') {
+        // Turn skipped in mid-spin. Stop the ticking; the wheel coasts to a stop on its own.
+        clearTimers();
+        spin = null;
+      }
+    }
+
+    // Time-out: the timer ran down to the end.
+    if (prevPhase === 'performing' && s.phase === 'scoring' && lastSeconds !== null && lastSeconds <= 2) {
+      soundBuzzer();
+    }
+    if (s.phase === 'performing') {
+      // Follows the server, but ignores small differences that are only network delay, so the seconds tick evenly.
+      var serverEnd = now() + (s.phaseMsLeft || (s.secondsLeft || 0) * 1000);
+      if (prevPhase !== 'performing' || Math.abs(serverEnd - perfEndAt) > 300) { perfEndAt = serverEnd; }
+      beepCheck();
+    } else {
+      lastSeconds = null;
+    }
+
+    lastPhase = s.phase;
+    render(s, prevPhase);
+  }
+
+  function secondsNow() { return Math.max(0, Math.ceil((perfEndAt - now()) / 1000)); }
+
+  function beepCheck() {
+    var secs = secondsNow();
+    if (secs !== lastSeconds && secs >= 1 && secs <= 5) { soundBeep(); }
+    lastSeconds = secs;
+  }
+
+  function timerTick() {
+    if (state && state.phase === 'performing') {
+      beepCheck();
+      renderTimer(state);
+    }
+  }
+
+  function render(s, prevPhase) {
+    renderTop(s);
+    renderTimer(s);
+    renderMid(s);
+    renderResults(s, prevPhase);
+    renderScoring(s, prevPhase);
+    renderAward(s);
+    renderHint(s);
+    renderBoard(s);
+    for (var i = 0; i < wheels.length; i++) {
+      var w = wheels[i];
+      lightWedge(w, !spin && isShowingChoice(s.phase) ? indexOf(w, s[w.key]) : -1);
+    }
+  }
+
+  function renderTop(s) {
+    setText($('roundText'), 'Round ' + (s.round || 1));
+    show('speedChip', !!s.speedRound);
+    show('roundSub', !s.speedRound && (s.round || 1) <= 3);
+  }
+
+  function renderTimer(s) {
+    var total = s.timerSeconds || 45;
+    var performing = s.phase === 'performing';
+    var left = performing ? secondsNow() : (typeof s.secondsLeft === 'number' ? s.secondsLeft : total);
+    var hot = performing && left <= 10;
+    setClass($('timer'), performing ? (hot ? 'hot' : '') : 'idle');
+    setText($('timer'), String(performing || s.phase === 'scoring' ? Math.max(0, Math.ceil(left)) : total));
+    var frac = performing ? Math.max(0, Math.min(1, (perfEndAt - now()) / 1000 / total)) : (s.phase === 'scoring' ? left / total : 1);
+    var tf = 'scaleX(' + frac.toFixed(3) + ')';
+    var fill = $('barFill');
+    fill.style.webkitTransform = tf;
+    fill.style.transform = tf;
+    setClass(fill, hot ? 'hot' : '');
+  }
+
+  function renderMid(s) {
+    var count = players(s).length;
+    var noPlayers = count === 0;
+    setClass($('mid'), noPlayers ? 'noPlayers' : '');
+    setText($('whoLabel'), s.phase === 'performing' ? 'Performing now' : s.phase === 'scoring' ? 'Just performed' : 'Up now');
+    fitText($('whoName'), currentName(s) || 'Pick a player', .7, .3);
+    var online = !!hubJoinUrl && hubJoinUrl.indexOf('http') === 0;
+    show('qrWrap', online);
+    setText($('qrText'), noPlayers ? 'Scan to add players' : 'Add players or your own voices');
+    if (online && qrFor !== hubJoinUrl) {
+      qrFor = hubJoinUrl;
+      $('qr').src = '/qr.svg?u=' + encodeURIComponent(hubJoinUrl);
+    }
+  }
+
+  function renderResults(s, prevPhase) {
+    var scoring = s.phase === 'scoring';
+    var awardShowing = awardVisible(s);
+    show('resV', !scoring && !awardShowing);
+    show('resT', !scoring && !awardShowing);
+    if (scoring || awardShowing) { return; }
+    var chosen = isShowingChoice(s.phase) && !spin;
+    var spinning = s.phase === 'spinning' || !!spin;
+    setClass($('resV'), 'result ' + (chosen ? 'on' : 'empty'));
+    setClass($('resT'), 'result ' + (chosen ? 'on' : 'empty'));
+    var vText = chosen && s.voice ? s.voice.text : (spinning ? 'Spinning...' : 'What voice?');
+    var tText = chosen && s.task ? s.task.text : (spinning ? 'Spinning...' : 'Doing what?');
+    var el = $('resVText'), el2 = $('resTText');
+    fitText(el, vText, chosen ? .92 : .56, .36);
+    fitText(el2, tText, chosen ? .92 : .56, .36);
+    if (chosen && prevPhase === 'spinning') {
+      el.className = 'resText pop';
+      el2.className = 'resText pop';
+    } else if (!chosen) {
+      el.className = 'resText';
+      el2.className = 'resText';
+    }
+  }
+
+  function renderScoring(s, prevPhase) {
+    var scoring = s.phase === 'scoring';
+    show('scorePanel', scoring);
+    if (!scoring) {
+      pickFor = null;
+      return;
+    }
+    var key = s.spinId + ':' + s.round;
+    if (pickFor !== key) {
+      pickFor = key;
+      pick = 3;
+    }
+    setText($('scoreWho'), 'Points for ' + (currentName(s) || 'this performance'));
+    drawPicks();
+  }
+
+  function buildPicks() {
+    var box = $('picks');
+    for (var i = 1; i <= 5; i++) {
+      var d = document.createElement('div');
+      d.className = 'pick';
+      d.textContent = String(i);
+      box.appendChild(d);
+    }
+  }
+  function drawPicks() {
+    var kids = $('picks').childNodes;
+    for (var i = 0; i < kids.length; i++) {
+      setClass(kids[i], i + 1 === pick ? 'pick focus' : 'pick');
+    }
+  }
+
+  // --- what just got scored ---
+  function awardText(a) {
+    if (!a) { return ''; }
+    var name = a.name || EVERYONE;
+    var pts = a.points || 0;
+    if (a.stolen && a.fromName) { return name + ' steals ' + pts + ' from ' + a.fromName + '!'; }
+    return name + ' +' + pts;
+  }
+  function awardVisible(s) {
+    return s.phase === 'ready' && now() < awardUntil && !!awardText(s.lastAward);
+  }
+  function renderAward(s) {
+    var key = s.lastAward ? JSON.stringify(s.lastAward) : null;
+    if (key !== lastAwardKey) {
+      lastAwardKey = key;
+      // An award from before this page loaded is old news.
+      if (key && awardSeenFirst) {
+        awardUntil = now() + AWARD_SHOW_MS;
+        soundPoints();
+      }
+    }
+    awardSeenFirst = true;
+    var on = awardVisible(s);
+    show('award', on);
+    if (on) { fitText($('awardText'), awardText(s.lastAward), 1.1, .5); }
+  }
+
+  // --- hint row ---
+  var hintKey = null;
+  function setHint(parts) {
+    var key = JSON.stringify(parts);
+    if (key === hintKey) { return; }
+    hintKey = key;
+    var box = $('hint');
+    while (box.firstChild) { box.removeChild(box.firstChild); }
+    for (var i = 0; i < parts.length; i++) {
+      if (parts[i].k) {
+        var k = document.createElement('span');
+        k.className = 'key';
+        k.textContent = parts[i].k;
+        box.appendChild(k);
+      }
+      box.appendChild(document.createTextNode(parts[i].t));
+    }
+  }
+  function renderHint(s) {
+    var count = players(s).length;
+    var name = currentName(s);
+    if (s.phase === 'ready') {
+      if (!count) {
+        setHint([{ k: 'OK', t: 'Spin the wheels' }]);
+      } else if (count === 1) {
+        setHint([{ k: 'OK', t: 'Spin for ' + shorten(name) }]);
+      } else {
+        setHint([{ k: 'OK', t: 'Spin for ' + shorten(name) }, { k: 'LEFT / RIGHT', t: 'Change player' }]);
+      }
+    } else if (s.phase === 'spinning') {
+      setHint([{ t: 'Here it comes...' }]);
+    } else if (s.phase === 'landed') {
+      setHint([{ k: 'OK', t: 'Start the ' + (s.timerSeconds || 45) + ' second timer' }, { k: 'UP', t: 'Spin again' }]);
+    } else if (s.phase === 'performing') {
+      setHint([{ k: 'OK', t: 'Stop the timer' }]);
+    } else if (s.phase === 'scoring') {
+      setHint([{ k: 'LEFT / RIGHT', t: 'Choose points' }, { k: 'OK', t: 'Give points' }]);
+    } else {
+      setHint([]);
+    }
+  }
+  function shorten(name) { return name && name.length > 26 ? name.substring(0, 25) + '.' : name; }
+
+  // --- scoreboard ---
+  // Up to 8 players: one row of tall chips. Up to 16: two rows. Beyond that, pages of 16 that change by themselves, with
+  // the current player always first so they stay on screen.
+  var ONE_ROW_MAX = 8, PER_ROW = 8, PER_PAGE = 16;
+
+  function sortedPlayers(s) {
+    var list = players(s).slice();
+    var order = {};
+    var i;
+    for (i = 0; i < list.length; i++) { order[list[i].id] = i; }
+    list.sort(function (a, b) {
+      if (b.score !== a.score) { return b.score - a.score; }
+      return order[a.id] - order[b.id];
+    });
+    // Ranks mean nothing until scores differ.
+    var ranked = list.length > 1 && list[0].score !== list[list.length - 1].score;
+    var rank = 0;
+    for (i = 0; i < list.length; i++) {
+      if (i === 0 || list[i].score !== list[i - 1].score) { rank = i + 1; }
+      list[i] = { id: list[i].id, name: list[i].name, score: list[i].score, rank: ranked ? rank : 0 };
+    }
+    return list;
+  }
+
+  function makeChip(p, cur) {
+    var c = document.createElement('div');
+    c.className = cur ? 'chip cur' : 'chip';
+    var r = document.createElement('span');
+    r.className = 'rank';
+    r.textContent = p.rank ? '#' + p.rank : '';
+    var n = document.createElement('span');
+    n.className = 'name';
+    n.textContent = p.name;
+    var v = document.createElement('span');
+    v.className = 'score';
+    v.textContent = String(p.score);
+    c.appendChild(r);
+    c.appendChild(n);
+    c.appendChild(v);
+    return c;
+  }
+
+  function renderBoard(s) {
+    var list = sortedPlayers(s);
+    if (!list.length) {
+      // The built-in player when nobody has joined. Its score is kept on the server.
+      list = [{ id: '', name: EVERYONE, score: everyoneScore(s), rank: 0 }];
+    }
+    var view = list;
+    var pages = 1;
+    if (list.length > PER_PAGE) {
+      var cur = null, rest = [];
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].id === s.currentPlayerId) { cur = list[i]; } else { rest.push(list[i]); }
+      }
+      var slots = cur ? PER_PAGE - 1 : PER_PAGE;
+      pages = Math.ceil(rest.length / slots);
+      if (boardPage >= pages) { boardPage = 0; }
+      view = rest.slice(boardPage * slots, (boardPage + 1) * slots);
+      if (cur) { view.unshift(cur); }
+    } else {
+      boardPage = 0;
+    }
+    boardPages = pages;
+    var key = JSON.stringify(view) + '|' + (s.currentPlayerId || '') + '|' + list.length;
+    if (key === boardKey) { return; }
+    boardKey = key;
+
+    var two = list.length > ONE_ROW_MAX;
+    var board = $('board');
+    setClass(board, two ? 'two' : 'one');
+    while (board.firstChild) { board.removeChild(board.firstChild); }
+    var frag = document.createDocumentFragment();
+    var perRow = two ? PER_ROW : ONE_ROW_MAX;
+    for (var at = 0; at < view.length; at += perRow) {
+      var row = document.createElement('div');
+      row.className = 'row';
+      var part = view.slice(at, at + perRow);
+      for (var j = 0; j < part.length; j++) {
+        row.appendChild(makeChip(part[j], part[j].id === s.currentPlayerId));
+      }
+      // Keep a short last row's chips the same width as the row above.
+      for (var pad = part.length; two && pad < perRow; pad++) {
+        var spacer = document.createElement('div');
+        spacer.className = 'chip';
+        spacer.style.visibility = 'hidden';
+        row.appendChild(spacer);
+      }
+      frag.appendChild(row);
+    }
+    board.appendChild(frag);
+    show('pageNote', pages > 1);
+    if (pages > 1) { setText($('pageNote'), list.length + ' players, page ' + (boardPage + 1) + ' of ' + pages); }
+  }
+
+  function everyoneScore(s) {
+    return s.everyoneScore || 0;
+  }
+
+  function nextBoardPage() {
+    if (boardPages > 1 && state) {
+      boardPage = (boardPage + 1) % boardPages;
+      renderBoard(state);
+    }
+  }
+
+  // --- remote ---
+  var actionBusyUntil = 0;
+
+  function act(body) {
+    var t = now();
+    if (t < actionBusyUntil) { return; } // A double press must not spin twice or give points twice.
+    actionBusyUntil = t + ACTION_DEAD_MS;
+    request('POST', ACTION_URL, body, 3000, function (data) {
+      actionBusyUntil = 0;
+      // A refused action is harmless: a double press, or someone on a phone got there first. Just refresh, quietly.
+      if (data) { guarded(applyState)(data); } else { pollNow(); }
+    });
+  }
+
+  function okStep(s) {
+    if (s.phase === 'ready') { act({ action: 'spin' }); }
+    else if (s.phase === 'landed') { act({ action: 'start_timer' }); }
+    else if (s.phase === 'performing') { act({ action: 'stop_timer' }); }
+    else if (s.phase === 'scoring') { act({ action: 'score', points: String(pick), commitment: 'false', crack: 'false' }); }
+  }
+
+  function moveCurrent(s, dir) {
+    var list = players(s);
+    if (list.length < 2) { return; }
+    var at = -1;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === s.currentPlayerId) { at = i; }
+    }
+    var next = list[(at + dir + list.length) % list.length];
+    act({ action: 'set_current', id: next.id });
+  }
+
+  function onKey(name) {
+    if (!state) { return; }
+    var s = state;
+    // Any key is a good moment to wake the audio, in case the browser kept it suspended.
+    ctx();
+    if (name === 'ok') {
+      okStep(s);
+    } else if (s.phase === 'scoring' && (name === 'left' || name === 'right')) {
+      pick = name === 'left' ? Math.max(1, pick - 1) : Math.min(5, pick + 1);
+      drawPicks();
+    } else if (s.phase === 'ready' && (name === 'left' || name === 'right')) {
+      moveCurrent(s, name === 'left' ? -1 : 1);
+    } else if (s.phase === 'landed' && name === 'up') {
+      act({ action: 'spin' });
+    }
+  }
+
+  window.onRemoteKey = function (name) { guarded(onKey)(name); };
+  var KEYS = { 37: 'left', 38: 'up', 39: 'right', 40: 'down', 13: 'ok' };
+  document.onkeydown = function (e) {
+    var name = KEYS[e.keyCode];
+    if (name) {
+      if (e.preventDefault) { e.preventDefault(); }
+      window.onRemoteKey(name);
+    } else if (e.keyCode === 27 && window.HubClient) {
+      // Escape stands in for Back when testing in a browser. On the TV the app handles Back.
+      HubClient.home();
+    }
+  };
+
+  // --- loops ---
+  function guarded(fn) {
+    return function (a, b) {
+      try {
+        return fn(a, b);
+      } catch (e) {
+        if (window.console) { console.log('Accent Wheel error: ' + e); }
+      }
+    };
+  }
+
+  var pollTimer = null;
+  var polling = false;
+
+  function pollNow() {
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+    poll();
+  }
+
+  function poll() {
+    if (polling) { return; }
+    polling = true;
+    request('GET', STATE_URL, null, 2500, function (data) {
+      polling = false;
+      lastPollAt = now();
+      try {
+        if (data) {
+          fails = 0; if (window.HubClient && HubClient.ready) { HubClient.ready(); }
+          applyState(data);
+        } else {
+          fails++;
+        }
+        show('reconnect', fails >= FAIL_LIMIT);
+      } catch (e) {
+        if (window.console) { console.log('Accent Wheel draw error: ' + e); }
+      }
+      if (pollTimer) { clearTimeout(pollTimer); }
+      pollTimer = setTimeout(poll, POLL_MS);
+    });
+  }
+
+  // The join address lives on the hub, not in the game state. Keep asking until it is known, and now and then afterwards
+  // because it can change if the network comes back.
+  function pollHub() {
+    request('GET', '/api/hub', null, 2500, function (data) {
+      try {
+        if (data && data.joinUrl) {
+          hubJoinUrl = data.joinUrl;
+          if (state) { renderMid(state); }
+        }
+      } catch (e) {
+        if (window.console) { console.log('Accent Wheel hub error: ' + e); }
+      }
+      setTimeout(pollHub, hubJoinUrl ? 15000 : 2000);
+    });
+  }
+
+  // --- start ---
+  buildPicks();
+  setText($('whoName'), '');
+  setHint([{ t: 'Getting the wheels ready...' }]);
+  window.onresize = guarded(fit);
+  fit();
+  if (window.HubClient) {
+    try { HubClient.start({ kind: 'tv', app: APP }); } catch (e) { if (window.console) { console.log(e); } }
+  }
+  poll();
+  pollHub();
+  setInterval(guarded(nextBoardPage), BOARD_PAGE_MS);
+  setInterval(guarded(timerTick), 200);
+  // Last resort, and exactly what a refresh would do. A poll always finishes within seconds, even with the server
+  // down, so a long silence means the page itself has stopped working.
+  setInterval(function () {
+    if (now() - lastPollAt > PAGE_DEAD_MS) { window.location.reload(); }
+  }, 5000);
+})();
+</script>
+</body>
+</html>

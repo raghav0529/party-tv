@@ -1,0 +1,18 @@
+build/
+.gradle/
+local.properties
+*.apk
+*.mp3
+*.m4a
+*.mp4
+bin/
+
+# Private: never upload
+core/src/main/resources/saavn.key
+HANDOFF.md
+docs/screenshots/
+docs/vocal-cut-demo/
+*.keystore
+*.jks
+.vscode/
+.idea/

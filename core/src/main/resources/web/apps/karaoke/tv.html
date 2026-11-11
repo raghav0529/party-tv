@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Karaoke</title>
+<style>
+html { background: #0c201b; }
+/* Hold the screen back until its first real data has been drawn, so a half-built screen never flashes up.
+   The animation is only a fallback: if no data arrives, the screen shows itself after 2.5 s anyway. */
+body { opacity: 0; -webkit-animation: ptvShow 0s 2.5s forwards; animation: ptvShow 0s 2.5s forwards; }
+body.ptv-ready { opacity: 1; -webkit-animation: none; animation: none; }
+@-webkit-keyframes ptvShow { to { opacity: 1; } } @keyframes ptvShow { to { opacity: 1; } }
+
+/* 1rem is 100px on a 1920x1080 screen; fit() rescales it for any other viewport. */
+html { font-size: 100px; }
+html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0c201b; }
+body { color: #f3eee2; font-family: Roboto, "Noto Sans Devanagari", "Nirmala UI", "Segoe UI", Arial, sans-serif; font-size: .36rem; }
+::-webkit-scrollbar { display: none; }
+.screen { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
+.hidden { display: none !important; }
+.gold { color: #d9b26a; }
+
+/* Idle */
+#idle { text-align: center; background: #0c201b; }
+#idleBody { position: absolute; left: 0; right: 0; top: .6rem; bottom: 0; display: -webkit-flex; display: flex;
+  -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: center; align-items: center;
+  -webkit-justify-content: center; justify-content: center; }
+#idleHead { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
+#idleHead h1 { margin: 0; font-family: Georgia, "Noto Serif", "Droid Serif", serif; font-size: 1.1rem; line-height: 1.25; font-weight: 700; color: #d9b26a; }
+#qrBox { margin-top: .22rem; width: 5.2rem; height: 5.2rem; background: #fff; padding: .14rem; border: .06rem solid #d9b26a; }
+#qrBox img { display: block; width: 100%; height: 100%; }
+#scan { margin-top: .2rem; font-size: .62rem; font-weight: 700; line-height: 1.25; }
+#joinText { margin-top: .06rem; font-size: .4rem; line-height: 1.3; color: #d9b26a; }
+#offlineBox { margin-top: .5rem; max-width: 14rem; padding: .5rem .7rem; border: .04rem solid #d9b26a; font-size: .62rem; line-height: 1.35; }
+
+/* Playing */
+#play { background: #0c201b; }
+#topStrip { position: absolute; left: .6rem; right: .6rem; top: .3rem; height: .6rem; line-height: .6rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .38rem; }
+#topStrip b { color: #d9b26a; font-weight: 700; }
+#topStrip span { color: #a9bfb7; }
+#stage { position: absolute; left: .8rem; right: .8rem; top: 1rem; bottom: 1.75rem; text-align: center; overflow: hidden;
+  display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column;
+  -webkit-justify-content: center; justify-content: center; }
+.ln { margin: .12rem 0; line-height: 1.32; }
+#lPrev { font-size: .54rem; color: #7f9a92; }
+#lCur { font-size: 1.1rem; font-weight: 700; color: #d9b26a; margin: .22rem 0; }
+/* Words still to be sung are pale, sung words gold, the word being sung white and underlined. */
+#lCur .w { color: #a9bfb7; border-bottom: .05rem solid transparent; }
+#lCur .w.on { color: #d9b26a; }
+#lCur .w.cur { color: #ffffff; border-bottom-color: #d9b26a; }
+#lCur.long { font-size: .86rem; }
+#lCur.xlong { font-size: .68rem; }
+#lNext1 { font-size: .6rem; color: #a9bfb7; }
+#lNext2 { font-size: .5rem; color: #7f9a92; }
+#bigTitle { font-size: 1rem; font-weight: 700; line-height: 1.25; color: #d9b26a; }
+#bigSub { margin-top: .3rem; font-size: .56rem; line-height: 1.35; color: #f3eee2; }
+#count { margin-top: .2rem; font-size: 1.2rem; font-weight: 700; line-height: 1.2; color: #f3eee2; }
+
+#plainWrap { position: absolute; left: 1.6rem; right: 1.6rem; top: 1rem; bottom: 1.75rem; overflow: hidden; text-align: center; }
+#plainList { -webkit-transition: -webkit-transform 1s linear; transition: transform 1s linear; }
+#plainList div { font-size: .6rem; line-height: 1.5; color: #f3eee2; min-height: .4rem; }
+#plainNote { position: absolute; right: .6rem; top: .36rem; font-size: .28rem; color: #a9bfb7; }
+
+#bottom { position: absolute; left: 0; right: 0; bottom: 0; height: 1.6rem; }
+#progress { position: absolute; left: .6rem; right: 2rem; top: 0; height: .08rem; background: #143630; }
+#progressFill { height: 100%; width: 0; background: #d9b26a; }
+#nextText { position: absolute; left: .6rem; right: 5rem; top: .34rem; font-size: .42rem; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#nextText span { color: #a9bfb7; }
+#badges { position: absolute; left: .6rem; top: .98rem; }
+#vocalBadge { display: inline-block; padding: .05rem .2rem; font-size: .28rem; line-height: 1.3; font-weight: 700; color: #0c201b; background: #d9b26a; }
+#addCorner { position: absolute; right: .3rem; bottom: .25rem; }
+#addCorner p { position: absolute; right: 1.4rem; bottom: .36rem; margin: 0; white-space: nowrap; font-size: .34rem; color: #d9b26a; }
+#qrSmall { display: block; width: 1.25rem; height: 1.25rem; background: #fff; padding: .06rem; }
+
+/* Overlays */
+#paused { position: absolute; left: 0; top: 0; right: 0; bottom: 0; background: rgba(12, 32, 27, .72); }
+#pausedText { position: absolute; left: 0; right: 0; top: 10%; text-align: center; font-size: 1.1rem; font-weight: 700; color: #f3eee2; }
+#errBanner { position: absolute; left: 2.4rem; right: 2.4rem; top: 1rem; padding: .14rem .3rem; text-align: center; background: #8e4433; color: #fff; font-size: .36rem; line-height: 1.3; }
+#reconnect { position: absolute; left: 0; right: 0; bottom: 0; padding: .16rem; text-align: center; background: #000; color: #d9b26a; font-size: .46rem; }
+
+</style>
+</head>
+<body>
+
+<div id="idle" class="screen">
+  <div id="idleBody">
+    <div id="idleHead">
+      <h1>Karaoke</h1>
+    </div>
+    <div id="qrBox"><img id="qrBig" alt=""></div>
+    <div id="scan">Scan to pick a song</div>
+    <div id="joinText">Connecting...</div>
+    <div id="offlineBox" class="hidden"></div>
+  </div>
+</div>
+
+<div id="play" class="screen hidden">
+  <div id="topStrip"><b id="topTitle"></b> <span id="topArtist"></span></div>
+  <div id="stage">
+    <div id="centerBlock" class="hidden">
+      <div id="bigTitle"></div>
+      <div id="bigSub"></div>
+      <div id="count"></div>
+    </div>
+    <div id="linesBlock" class="hidden">
+      <div id="lPrev" class="ln"></div>
+      <div id="lCur" class="ln"></div>
+      <div id="lNext1" class="ln"></div>
+      <div id="lNext2" class="ln"></div>
+    </div>
+  </div>
+  <div id="plainWrap" class="hidden"><div id="plainList"></div></div>
+  <div id="plainNote" class="hidden">Lyrics timing not available</div>
+  <div id="bottom">
+    <div id="progress"><div id="progressFill"></div></div>
+    <div id="nextText"></div>
+    <div id="badges"><span id="vocalBadge" class="hidden">Vocals reduced</span></div>
+    <div id="addCorner"><p>Add songs</p><img id="qrSmall" alt=""></div>
+  </div>
+  <div id="paused" class="hidden"><div id="pausedText">Paused</div></div>
+</div>
+
+<div id="errBanner" class="hidden"></div>
+<div id="reconnect" class="hidden">Reconnecting...</div>
+
+<script src="/shared/hub-client.js"></script>
+<script>
+(function () {
+  var POLL_MS = 500;
+  var TICK_MS = 100;
+  var COUNTDOWN_SECONDS = 5;
+  var LYRICS_RETRY_MS = 1500;
+  var LYRICS_NONE_RECHECK_MS = 8000;
+  var LYRICS_FETCH_DEAD_MS = 12000; // Requests time out at 8 s, so one older than this was lost.
+  var LYRICS_SLOW_MS = 20000;
+  var PAGE_DEAD_MS = 20000;
+  var DEFAULT_MS_PER_CHAR = 110; // Singing pace used until a song's own lines show its real pace.
+  var MIN_LINE_MS = 1200;    // Even a one-word line takes about this long to sing.
+  var MUSIC_MIN_MS = 3000;   // Shorter musical gaps are just a breath between lines, with no music line.
+  var MUSIC_TEXT = '♪ ♪ ♪';
+  var songPace = DEFAULT_MS_PER_CHAR;
+  var LEAD_MS = 200;        // Show a line slightly early so people can read it before singing it.
+  var FAIL_LIMIT = 2;       // Failed polls before "Reconnecting...".
+  var ERROR_SHOW_MS = 8000;
+  var UNKNOWN_DURATION_MS = 240000;
+
+  var els = {};
+  function $(id) {
+    if (!els[id]) { els[id] = document.getElementById(id); }
+    return els[id];
+  }
+  function setText(id, text) {
+    var el = $(id);
+    if (el.__text !== text) { el.__text = text; el.textContent = text; }
+  }
+  function show(id, on) {
+    var el = $(id);
+    var has = /(^| )hidden( |$)/.test(el.className);
+    if (on && has) {
+      el.className = el.className.replace(/(^| )hidden( |$)/, ' ').replace(/^ +| +$/g, '');
+    } else if (!on && !has) {
+      el.className = el.className ? el.className + ' hidden' : 'hidden';
+    }
+  }
+
+  function fit() {
+    var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    if (s > 0) { document.documentElement.style.fontSize = (100 * s) + 'px'; }
+    plainHeight = -1;
+  }
+
+  // --- networking ---
+  function getJson(url, timeout, done) {
+    var xhr = new XMLHttpRequest();
+    var finished = false;
+    function finish(data) {
+      if (finished) { return; }
+      finished = true;
+      done(data);
+    }
+    try {
+      xhr.open('GET', url, true);
+      xhr.timeout = timeout;
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState !== 4) { return; }
+        var data = null;
+        if (xhr.status === 200) {
+          try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+        }
+        finish(data);
+      };
+      xhr.ontimeout = function () { finish(null); };
+      xhr.onerror = function () { finish(null); };
+      xhr.send();
+    } catch (e) {
+      finish(null);
+    }
+  }
+
+  // --- state ---
+  var state = null;
+  var fails = 0;
+  var clockPos = 0;       // Interpolated song position in ms.
+  var clockAt = 0;
+  var currentUid = null;
+  var currentSongId = null;
+  var lastPollAt = new Date().getTime();
+  var lyricsStartedAt = 0;
+  var lyricsFetchAt = 0;  // When the lyric request now in flight began, or 0.
+  var lyrics = { type: 'loading', lines: [] };
+  var lyricsTimer = null;
+  var lastLine = -2;
+  var lastCount = -1;
+  var plainHeight = -1;
+  var plainFor = null;
+  var qrFor = null;
+  var errorText = null;
+  var errorTimer = null;
+
+  function now() { return new Date().getTime(); }
+
+  function position() {
+    if (!state || !state.now) { return 0; }
+    return state.playing ? clockPos + (now() - clockAt) : clockPos;
+  }
+
+  function syncClock(serverPos, playing) {
+    // Small jitter is smoothed so a line cannot flicker back and forth at its boundary; real jumps snap.
+    var est = position();
+    var diff = serverPos - est;
+    clockPos = (!playing || Math.abs(diff) > 500) ? serverPos : est + diff * 0.2;
+    clockAt = now();
+  }
+
+  function poll() {
+    getJson('/api/state', 2500, function (data) {
+      lastPollAt = now();
+      // A drawing error must never end the polling: the next state simply draws again.
+      try {
+        if (data) {
+          fails = 0; if (window.HubClient && HubClient.ready) { HubClient.ready(); }
+          onState(data);
+        } else {
+          fails++;
+        }
+        show('reconnect', fails >= FAIL_LIMIT);
+      } catch (e) {
+        if (window.console) { console.log('Karaoke draw error: ' + e); }
+      }
+      setTimeout(poll, POLL_MS);
+    });
+  }
+
+  function onState(s) {
+    var uid = s.now ? s.now.uid : null;
+    var songId = s.now ? s.now.id : null;
+    var isNewSong = uid !== currentUid || songId !== currentSongId;
+    currentSongId = songId;
+    if (isNewSong) {
+      clockPos = s.positionMs || 0;
+      clockAt = now();
+    }
+    if (state && !isNewSong) {
+      syncClock(s.positionMs || 0, s.playing);
+    }
+    if (!state) {
+      clockPos = s.positionMs || 0;
+      clockAt = now();
+    }
+    state = s;
+    if (isNewSong) {
+      currentUid = uid;
+      startLyrics(uid);
+    }
+    healLyricsCheck();
+    renderQr();
+    renderChrome();
+    renderError();
+    renderLyrics();
+    renderSlow();
+  }
+
+  // If the lyric check ever dies while lyrics are still missing, start it again. There is no refresh on a TV.
+  function healLyricsCheck() {
+    if (!currentUid || (lyrics.type !== 'loading' && lyrics.type !== 'none') || lyricsTimer) { return; }
+    if (!lyricsFetchAt || now() - lyricsFetchAt > LYRICS_FETCH_DEAD_MS) { fetchLyrics(currentUid); }
+  }
+
+  // --- lyrics fetch ---
+  function startLyrics(uid) {
+    if (lyricsTimer) { clearTimeout(lyricsTimer); lyricsTimer = null; }
+    lyrics = { type: 'loading', lines: [] };
+    lyricsStartedAt = now();
+    lyricsFetchAt = 0;
+    lastLine = -2;
+    lastCount = -1;
+    plainFor = null;
+    if (uid) { fetchLyrics(uid); }
+  }
+
+  function checkLyricsAgain(uid, delay) {
+    lyricsTimer = setTimeout(function () {
+      lyricsTimer = null;
+      fetchLyrics(uid);
+    }, delay);
+  }
+
+  function fetchLyrics(uid) {
+    lyricsFetchAt = now();
+    getJson('/api/lyrics?uid=' + encodeURIComponent(uid), 8000, function (data) {
+      if (uid !== currentUid) { return; }
+      lyricsFetchAt = 0;
+      if (!data || !data.type || data.type === 'loading') {
+        checkLyricsAgain(uid, LYRICS_RETRY_MS);
+        return;
+      }
+      // "None" can change: a failed lookup is tried again once its song is playing. Keep checking at a slow pace.
+      if (data.type === 'none') {
+        checkLyricsAgain(uid, LYRICS_NONE_RECHECK_MS);
+        if (lyrics.type === 'none') { return; }
+      }
+      var lines = data.lines || [];
+      if (data.type === 'synced') {
+        try {
+          lines = prepareLines(lines, state && state.now ? state.now.durationSec : 0);
+        } catch (e) {
+          lines = data.lines || []; // Plain timed lines, without music lines, still beat a stuck screen.
+        }
+      }
+      lyrics = { type: data.type, lines: lines };
+      lastLine = -2;
+      lastCount = -1;
+      plainFor = null;
+      renderLyrics();
+    });
+  }
+
+  // --- rendering ---
+  function isHttp(url) { return !!url && url.indexOf('http') === 0; }
+
+  function renderQr() {
+    var url = state.joinUrl;
+    var online = isHttp(url);
+    show('qrBox', online);
+    show('scan', online);
+    show('joinText', online);
+    show('offlineBox', !online);
+    show('addCorner', online);
+    if (!online) {
+      setText('offlineBox', url || 'Not connected to a network.');
+      return;
+    }
+    setText('joinText', url);
+    if (qrFor !== url) {
+      qrFor = url;
+      var src = '/qr.svg?u=' + encodeURIComponent(url);
+      $('qrBig').src = src;
+      $('qrSmall').src = src;
+    }
+  }
+
+  function renderChrome() {
+    var song = state.now;
+    show('idle', !song);
+    show('play', !!song);
+    if (!song) { return; }
+    setText('topTitle', song.title || '');
+    setText('topArtist', song.artist ? ' ' + song.artist : '');
+    var q = state.queue || [];
+    if (q.length) {
+      setText('nextText', 'Next: ' + (q[0].title || '') + (q.length > 1 ? '  (+' + (q.length - 1) + ' more)' : ''));
+    } else {
+      setText('nextText', 'Nothing queued next. Scan and add a song!');
+    }
+    show('vocalBadge', !!state.vocalCut);
+    show('paused', !!state.paused);
+  }
+
+  function renderError() {
+    var err = state.lastError || null;
+    if (err !== errorText) {
+      errorText = err;
+      if (errorTimer) { clearTimeout(errorTimer); errorTimer = null; }
+      if (err) {
+        setText('errBanner', err);
+        show('errBanner', true);
+        // An internet problem stays up until it clears. Other errors are brief notices.
+        if (err.indexOf('Internet') !== 0) {
+          errorTimer = setTimeout(function () { show('errBanner', false); }, ERROR_SHOW_MS);
+        }
+      } else {
+        show('errBanner', false);
+      }
+    }
+  }
+
+  function durationMs() {
+    var d = state && state.now ? state.now.durationSec : 0;
+    return d > 0 ? d * 1000 : 0;
+  }
+
+  function renderSlow() {
+    if (!state.now) { return; }
+    var d = durationMs();
+    var pct = d ? Math.min(100, Math.max(0, position() / d * 100)) : 0;
+    $('progressFill').style.width = pct.toFixed(1) + '%';
+  }
+
+  function findLine(lines, t) {
+    // Binary search: the last line with start time <= t, or -1 if the song has not reached line 0 yet.
+    var lo = 0, hi = lines.length - 1, ans = -1, mid;
+    while (lo <= hi) {
+      mid = (lo + hi) >> 1;
+      if (lines[mid].t <= t) { ans = mid; lo = mid + 1; } else { hi = mid - 1; }
+    }
+    return ans;
+  }
+
+  function lineText(line) {
+    if (!line) { return ''; }
+    var t = line.text || '';
+    return t.replace(/\s+/g, '') ? t : MUSIC_TEXT;
+  }
+
+  // Blank, or only music symbols and dots. Some LRCLIB lyrics mark music with the note emojis U+1F3B5, U+1F3B6, U+1F3BC.
+  function isMusicOnly(text) {
+    return !(text || '').replace(/\uD83C[\uDFB5\uDFB6\uDFBC]/g, '').replace(/[\s♩♪♫♬.·*~_–—-]/g, '');
+  }
+
+  function median(list) {
+    list.sort(function (a, b) { return a - b; });
+    return list[list.length >> 1];
+  }
+
+  // Lyric files often have no marker for instrumental stretches, so a line followed by one would have its words
+  // spread across the whole gap. This song's own pace shows how long the words really take. Whatever is left of a
+  // long gap, and the outro, becomes a separate music line.
+  function prepareLines(src, durationSec) {
+    var paces = [];
+    var i;
+    for (i = 0; i + 1 < src.length; i++) {
+      var g = src[i + 1].t - src[i].t;
+      if (!isMusicOnly(src[i].text) && g >= 800 && g <= 15000) { paces.push(g / (src[i].text.length + 1)); }
+    }
+    songPace = paces.length ? Math.max(70, Math.min(170, median(paces) * 0.9)) : DEFAULT_MS_PER_CHAR;
+
+    var out = [];
+    function addMusic(t) {
+      // Never two music lines in a row, and never before the first words: the countdown covers the intro.
+      if (out.length && out[out.length - 1].text) { out.push({ t: t, text: '' }); }
+    }
+    for (i = 0; i < src.length; i++) {
+      var line = src[i];
+      var gap = src[i + 1] ? src[i + 1].t - line.t : (durationSec ? durationSec * 1000 - line.t : 0);
+      if (isMusicOnly(line.text)) {
+        if (gap >= MUSIC_MIN_MS) { addMusic(line.t); }
+        continue;
+      }
+      out.push({ t: line.t, text: line.text });
+      var words = Math.max(MIN_LINE_MS, (line.text.length + 1) * songPace * 1.15);
+      if (gap > words + MUSIC_MIN_MS) { addMusic(line.t + words); }
+    }
+    return out;
+  }
+
+  function showMode(mode) {
+    show('centerBlock', mode === 'center');
+    show('linesBlock', mode === 'lines');
+    show('plainWrap', mode === 'plain');
+    show('plainNote', mode === 'plain');
+  }
+
+  function renderCenter(title, sub, count) {
+    showMode('center');
+    setText('bigTitle', title);
+    setText('bigSub', sub);
+    setText('count', count);
+    show('bigSub', !!sub);
+    show('count', !!count);
+  }
+
+  function renderLyrics() {
+    if (!state || !state.now) { return; }
+    var song = state.now;
+    var type = lyrics.type;
+    if (type === 'synced' && lyrics.lines.length) {
+      renderSynced(song);
+    } else if (type === 'plain' && lyrics.lines.length) {
+      renderPlain();
+    } else if (type === 'loading') {
+      var slow = now() - lyricsStartedAt > LYRICS_SLOW_MS;
+      renderCenter(song.title || '', slow ? 'Lyrics are taking a while. Keep singing!' : 'Finding lyrics...', '');
+    } else {
+      renderCenter(song.title || '', 'No lyrics found for this song, sing what you remember!', '');
+    }
+  }
+
+  function renderSynced(song) {
+    var lines = lyrics.lines;
+    var pos = position();
+    var i = findLine(lines, pos + LEAD_MS);
+    if (i < 0) {
+      var left = Math.max(0, Math.ceil((lines[0].t - pos) / 1000));
+      // The intro plays in full. The number only appears for its last seconds.
+      var shown = left <= COUNTDOWN_SECONDS ? left : 0;
+      if (shown !== lastCount || lastLine !== -1) {
+        lastCount = shown;
+        lastLine = -1;
+        renderCenter(song.title || '', 'Get ready', shown > 0 ? String(shown) : '');
+      }
+      return;
+    }
+    if (i !== lastLine) {
+      lastLine = i;
+      showMode('lines');
+      var cur = lineText(lines[i]);
+      setText('lPrev', i > 0 ? lineText(lines[i - 1]) : '');
+      buildWords(lines[i].text || '', cur);
+      setText('lNext1', lineText(lines[i + 1]));
+      setText('lNext2', lineText(lines[i + 2]));
+      $('lCur').className = 'ln' + (cur.length > 60 ? ' xlong' : cur.length > 34 ? ' long' : '');
+    }
+    updateWords(lines, i, pos);
+  }
+
+  // --- word highlighting ---
+  // Lyric files time lines, not words, so word timing is estimated: a line's time is shared across its words by
+  // their length. A line followed by a long instrumental gap must not stretch across the gap, hence the cap.
+  var wordEls = [];     // Spans of the current line.
+  var wordStarts = [];  // Each word's start as a fraction (0 to 1) of the line's sung time.
+  var wordChars = 0;
+  var wordShown = -2;
+
+  function buildWords(text, display) {
+    var box = $('lCur');
+    while (box.firstChild) { box.removeChild(box.firstChild); }
+    wordEls = [];
+    wordStarts = [];
+    wordChars = 0;
+    wordShown = -2;
+    var words = text.replace(/^\s+|\s+$/g, '').split(/\s+/);
+    if (!text.replace(/\s+/g, '')) {
+      box.textContent = display;
+      return;
+    }
+    var total = 0;
+    var i;
+    for (i = 0; i < words.length; i++) { total += words[i].length + 1; }
+    var used = 0;
+    var frag = document.createDocumentFragment();
+    for (i = 0; i < words.length; i++) {
+      var span = document.createElement('span');
+      span.className = 'w';
+      span.textContent = words[i];
+      frag.appendChild(span);
+      if (i < words.length - 1) { frag.appendChild(document.createTextNode(' ')); }
+      wordEls.push(span);
+      wordStarts.push(used / total);
+      used += words[i].length + 1;
+    }
+    wordChars = total;
+    box.appendChild(frag);
+  }
+
+  function updateWords(lines, i, pos) {
+    if (!wordEls.length) { return; }
+    var start = lines[i].t;
+    var natural = Math.max(MIN_LINE_MS, wordChars * songPace * 1.15);
+    var gap = lines[i + 1] ? lines[i + 1].t - start : natural;
+    // Finish early enough that the last word lights before the next line replaces this one (it arrives LEAD_MS early).
+    var sung = Math.max(300, Math.min((gap - LEAD_MS) * 0.85, natural));
+    var frac = (pos - start) / sung;
+    var active = -1;
+    for (var k = 0; k < wordStarts.length; k++) {
+      if (frac >= wordStarts[k]) { active = k; } else { break; }
+    }
+    // Past the end of the sung time every word stays lit until the next line.
+    if (frac >= 1) { active = wordEls.length; }
+    if (active === wordShown) { return; }
+    wordShown = active;
+    for (var n = 0; n < wordEls.length; n++) {
+      var c = n < active ? 'w on' : n === active ? 'w on cur' : 'w';
+      if (wordEls[n].className !== c) { wordEls[n].className = c; }
+    }
+  }
+
+  function renderPlain() {
+    showMode('plain');
+    var list = $('plainList');
+    if (plainFor !== currentUid) {
+      plainFor = currentUid;
+      plainHeight = -1;
+      while (list.firstChild) { list.removeChild(list.firstChild); }
+      var frag = document.createDocumentFragment();
+      for (var i = 0; i < lyrics.lines.length; i++) {
+        var div = document.createElement('div');
+        div.textContent = lyrics.lines[i].text || '';
+        frag.appendChild(div);
+      }
+      list.appendChild(frag);
+    }
+    if (plainHeight < 0) { plainHeight = list.offsetHeight; }
+    // Hold the first lines on screen at the start, and finish with the last lines still visible.
+    var viewH = $('plainWrap').offsetHeight;
+    var travel = Math.max(0, plainHeight - viewH * 0.6);
+    var d = durationMs() || UNKNOWN_DURATION_MS;
+    var frac = Math.min(1, Math.max(0, position() / d));
+    var y = -Math.round(travel * frac);
+    if (list.__y !== y) {
+      list.__y = y;
+      var tf = 'translateY(' + y + 'px)';
+      list.style.webkitTransform = tf;
+      list.style.transform = tf;
+    }
+  }
+
+  // --- start ---
+  window.onresize = fit;
+  fit();
+  if (window.HubClient) {
+    try { HubClient.start({ kind: 'tv', app: 'karaoke' }); } catch (e) { if (window.console) { console.log(e); } }
+  }
+  poll();
+  setInterval(function () {
+    if (!state || !state.now || !state.playing) { return; }
+    try {
+      if (lyrics.type === 'synced') { renderLyrics(); }
+    } catch (e) {
+      if (window.console) { console.log('Karaoke draw error: ' + e); }
+    }
+  }, TICK_MS);
+  setInterval(function () {
+    try {
+      if (state && state.now && state.playing && lyrics.type === 'plain') { renderLyrics(); }
+    } catch (e) {
+      if (window.console) { console.log('Karaoke draw error: ' + e); }
+    }
+  }, 1000);
+  // Last resort, and exactly what a refresh would do. A poll always finishes within seconds, even with the server
+  // down, so a long silence means the page itself has stopped working.
+  setInterval(function () {
+    if (now() - lastPollAt > PAGE_DEAD_MS) { window.location.reload(); }
+  }, 5000);
+})();
+</script>
+</body>
+</html>

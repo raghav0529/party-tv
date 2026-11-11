@@ -1,0 +1,1210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0c201b">
+<title>Reverse Charades</title>
+<style>
+/* Design tokens. Same in all three game pages. Gold marks only the one thing to do next. */
+:root {
+  --bg: #0c201b; --surface: #143630; --line: #2f5c52; --ink: #f3eee2; --muted: #a9bfb7; --gold: #d9b26a;
+  --alert: #e8806a;
+  --s1: 8px; --s2: 16px; --s3: 24px;
+  --t1: 16px; --t2: 20px; --t3: 28px; --t4: 44px;
+  /* The film-title voice: names and big moments only. Controls stay in the plain sans. */
+  --display: Georgia, "Noto Serif", "Droid Serif", "Noto Serif Devanagari", serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; overflow-anchor: none; }
+body { background: var(--bg); color: var(--ink); font-family: -apple-system, "Roboto", "Noto Sans", "Noto Sans Devanagari", "Droid Sans", "Segoe UI", "Mangal", Arial, sans-serif; font-size: var(--t2); line-height: 1.3; -webkit-text-size-adjust: 100%; word-wrap: break-word; overflow-wrap: break-word; }
+.hidden { display: none !important; }
+button { min-height: 56px; padding: var(--s1) var(--s2); border: 1px solid var(--line); border-radius: 12px; background: transparent; color: var(--ink); font: inherit; font-size: var(--t1); font-weight: 600; cursor: pointer; -webkit-appearance: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+button:active { background: var(--surface); }
+button.primary { min-height: 72px; border-radius: 16px; border-color: var(--gold); background: var(--gold); color: var(--bg); font-size: var(--t3); font-weight: 800; }
+button.primary:active { background: var(--ink); border-color: var(--ink); }
+button.quiet { border-color: transparent; color: var(--muted); font-weight: 500; }
+button.chosen { border-color: var(--gold); color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }
+button[disabled] { opacity: .45; cursor: default; }
+button.primary[disabled] { opacity: 1; background: var(--surface); border-color: var(--line); color: var(--muted); }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+input, select { width: 100%; min-width: 0; min-height: 56px; padding: var(--s1) var(--s2); border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); font: inherit; font-size: var(--t1); -webkit-appearance: none; }
+input::placeholder { color: var(--muted); opacity: 1; }
+input:focus { border-color: var(--gold); outline: none; }
+.wide { display: block; width: 100%; }
+.page { display: flex; flex-direction: column; gap: var(--s3); max-width: 640px; margin: 0 auto; padding: var(--s1) var(--s2) var(--s3); }
+.page.withBar { padding-bottom: 112px; }
+.head { display: flex; align-items: center; gap: var(--s1); }
+.head h1 { flex: 1 1 auto; min-width: 0; margin: 0; font-family: var(--display); font-size: var(--t2); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.head button { flex: 0 0 auto; padding: var(--s1); }
+.group { display: flex; flex-direction: column; gap: var(--s1); }
+h2 { margin: 0; color: var(--muted); font-size: var(--t1); font-weight: 600; }
+.pill { align-self: flex-start; padding: 4px 12px; border-radius: 99px; background: var(--surface); color: var(--muted); font-size: var(--t1); font-weight: 600; }
+.pill.live { background: var(--ink); color: var(--bg); }
+.title { font-family: var(--display); font-size: var(--t3); font-weight: 700; line-height: 1.15; }
+.sub { color: var(--muted); font-size: var(--t1); }
+.bigClock { font-size: var(--t4); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.low { color: var(--alert); }
+/* Score strip */
+.strip { display: flex; gap: var(--s2); }
+.tile { flex: 1 1 0; min-width: 0; display: flex; align-items: baseline; justify-content: space-between; gap: var(--s1); padding: var(--s1) 0; border-bottom: 2px solid var(--line); color: var(--muted); font-size: var(--t1); }
+.tile .n { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile b { flex: 0 0 auto; color: var(--ink); font-size: var(--t2); font-variant-numeric: tabular-nums; }
+.tile.cur { border-bottom-color: var(--gold); color: var(--ink); font-weight: 700; }
+/* Rows */
+.row { display: flex; align-items: center; gap: var(--s1); min-height: 56px; }
+.row .grow { flex: 1 1 auto; min-width: 0; }
+.x { flex: 0 0 56px; width: 56px; padding: 0; border-color: transparent; background: none; color: var(--muted); font-size: var(--t2); font-weight: 500; }
+.add { display: flex; gap: var(--s1); }
+.add input { flex: 1 1 auto; }
+.add button { flex: 0 0 auto; }
+.btnRow { display: flex; gap: var(--s1); }
+.btnRow button { flex: 1 1 0; min-width: 0; padding-left: var(--s1); padding-right: var(--s1); }
+/* Settings */
+#settings { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 8; overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; background: var(--bg); }
+.how { margin: 0; padding-left: var(--s3); font-size: var(--t1); color: var(--muted); }
+.how li + li { margin-top: var(--s1); }
+.err { padding: var(--s1) 12px; border: 1px solid var(--alert); border-radius: 12px; color: var(--ink); font-size: var(--t1); }
+/* Always on screen */
+#bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 3; padding: var(--s1) var(--s2) var(--s2); background: var(--bg); }
+#bar.typing { display: none; }
+#mainBtn { display: block; width: 100%; max-width: 608px; margin: 0 auto; line-height: 1.1; }
+#banner { position: fixed; top: 0; left: 0; right: 0; z-index: 10; padding: var(--s1) var(--s2); background: var(--ink); color: var(--bg); font-size: var(--t1); font-weight: 700; text-align: center; }
+#toast { position: fixed; left: var(--s2); right: var(--s2); bottom: 104px; z-index: 10; max-width: 480px; margin: 0 auto; padding: var(--s2); border-radius: 12px; background: var(--ink); color: var(--bg); font-size: var(--t1); font-weight: 700; }
+#toast.bad { background: var(--surface); border: 1px solid var(--alert); color: var(--ink); }
+#modal { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 20; padding: var(--s2); background: rgba(0, 0, 0, .8); }
+#modalBox { display: flex; flex-direction: column; gap: var(--s2); max-width: 460px; margin: 64px auto 0; padding: var(--s3) var(--s2) var(--s2); border-radius: 16px; background: var(--surface); }
+#modalText { margin: 0; font-size: var(--t2); }
+#modalRow { display: flex; gap: var(--s1); }
+#modalRow button { flex: 1 1 0; min-width: 0; min-height: 56px; font-size: var(--t1); font-weight: 700; }
+
+/* A turn: one screen, nothing to scroll */
+.fullView, #turnView { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 4; display: flex; flex-direction: column; gap: var(--s1); max-width: 640px; margin: 0 auto; padding: var(--s1) var(--s2) var(--s2); background: var(--bg); overflow: hidden; -webkit-user-select: none; user-select: none; }
+#promptPanel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: var(--s1) 12px; border-radius: 16px; background: var(--surface); border: 2px solid transparent; overflow: hidden; }
+#promptPanel.good { border-color: var(--gold); }
+#promptPanel.skip { border-color: var(--muted); }
+#pHead { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: var(--s1); }
+#pHead .pill { align-self: center; background: var(--bg); }
+#tClock { font-size: var(--t3); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+#pBox { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+#pText { flex: none; font-family: var(--display); font-weight: 700; line-height: 1.08; text-align: center; }
+#pWait { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s1); text-align: center; overflow: hidden; }
+#pWaitMain { font-family: var(--display); font-size: var(--t3); font-weight: 700; }
+.pop { animation: pop .2s ease-out; }
+@keyframes pop { 0% { transform: scale(.9); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .pop { animation: none; } }
+.big { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); width: 100%; padding: var(--s1) var(--s3); border-radius: 16px; line-height: 1.1; }
+.big .bs { color: inherit; font-size: var(--t1); font-weight: 500; }
+#gotBtn { flex: 0 0 auto; min-height: 88px; border: 0; background: var(--gold); color: var(--bg); font-size: var(--t3); font-weight: 800; }
+#gotBtn:active, #gotBtn.flash { background: var(--ink); }
+#gotBtn .bs { display: none; }
+#gotBtn.resume .bs { display: inline; }
+#gotCount { font-size: var(--t3); font-variant-numeric: tabular-nums; }
+#skipBtn { flex: 0 0 auto; min-height: 64px; font-size: var(--t2); font-weight: 700; }
+#skipBtn.flash { background: var(--surface); }
+#skipBtn .bs { color: var(--muted); }
+#skipCount { display: none; }
+.big.locked { opacity: .6; }
+.big[disabled] { background: var(--surface); color: var(--muted); }
+/* Role question */
+.roleBtn { flex: 1 1 0; min-height: 0; width: 100%; border-radius: 16px; font-size: var(--t3); font-weight: 800; }
+#roleGuess { border-color: var(--line); }
+#guessView { align-items: center; justify-content: center; gap: var(--s2); text-align: center; }
+#gClock { font-size: 112px; line-height: 1; font-weight: 800; font-variant-numeric: tabular-nums; }
+#gMain { font-family: var(--display); font-size: var(--t3); font-weight: 700; }
+/* Between turns */
+.teamBlock { display: flex; flex-direction: column; gap: var(--s1); }
+.teamBlock + .teamBlock { margin-top: var(--s2); }
+.teamName { min-height: 56px; padding: var(--s1) 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: none; font-size: var(--t2); font-weight: 700; }
+.mnext { display: inline-block; margin-left: var(--s1); padding: 0 var(--s1); border-radius: 99px; background: var(--ink); color: var(--bg); font-size: var(--t1); font-weight: 600; }
+.mlist { display: flex; flex-direction: column; list-style: none; margin: 0; padding: 0; }
+.results { display: flex; flex-direction: column; gap: var(--s1); list-style: none; margin: 0; padding: 0; font-size: var(--t1); }
+.results li { display: flex; align-items: center; gap: var(--s1); }
+.results .m { flex: 0 0 auto; width: 20px; height: 20px; }
+.results .m svg { display: block; width: 100%; height: 100%; }
+.results .tx { flex: 1 1 auto; min-width: 0; }
+.results .oc { flex: 0 0 auto; color: var(--muted); }
+</style>
+</head>
+<body>
+<div id="banner" role="alert" style="display:none">Can't reach the TV. Check you are on the same WiFi.</div>
+
+<div id="roleView" class="fullView" style="display:none">
+  <div class="head"><h1>Reverse Charades</h1><button type="button" class="quiet openSettings">Settings</button><button type="button" class="quiet goHome">Home</button></div>
+  <button type="button" id="roleActor" class="roleBtn primary">Show me the movie</button>
+  <button type="button" id="roleGuess" class="roleBtn">I'm guessing</button>
+</div>
+
+<div id="guessView" class="fullView" style="display:none">
+  <div id="gClock" role="timer"></div>
+  <div id="gMain"></div>
+  <button type="button" id="gSwitch" class="quiet">Wrong role?</button>
+</div>
+
+<div id="turnView" style="display:none">
+  <div class="head"><h1 id="tTeam"></h1><button type="button" class="quiet openSettings">Settings</button><button type="button" class="quiet goHome">Home</button></div>
+  <div id="promptPanel">
+    <div id="pHead"><span class="pill">Movie</span><span id="tClock" role="timer"></span></div>
+    <div id="pBox"><div id="pText"></div></div>
+    <div id="pWait" style="display:none">
+      <div id="pWaitMain"></div>
+      <div id="pWaitSub" class="sub"></div>
+      <button type="button" id="pGuessBtn" class="quiet" style="display:none">I'm guessing</button>
+    </div>
+  </div>
+  <button type="button" id="gotBtn" class="big"><span><span id="gotLabel">Got it</span> <span class="bs" id="gotSub"></span></span><span id="gotCount">0</span></button>
+  <button type="button" id="skipBtn" class="big"><span id="skipLabel">Skip</span><span class="bs" id="skipSub"></span><span id="skipCount">0</span></button>
+  <div id="tSmall" class="btnRow">
+    <button type="button" id="foulBtn">Foul -1</button>
+    <button type="button" id="undoBtn">Undo</button>
+    <button type="button" id="pauseBtn">Pause</button>
+  </div>
+  <div id="tScores" class="strip"></div>
+</div>
+
+<div class="page withBar" id="betweenView">
+  <div class="head"><h1>Reverse Charades</h1><button type="button" class="quiet openSettings">Settings</button><button type="button" class="quiet goHome">Home</button></div>
+
+  <section class="group" id="gameCard" aria-label="The game">
+    <span class="pill" id="round">Connecting...</span>
+    <div class="title" id="who"></div>
+    <div class="sub" id="guessLine" style="display:none"></div>
+    <div class="scoreGap" id="scores" style="display:flex;gap:8px;margin-top:8px"></div>
+    <div id="sumBox" class="group" style="display:none;margin-top:8px">
+      <div class="title" id="sumHead"></div>
+      <ul class="results" id="results"></ul>
+      <button type="button" id="undoLast" class="wide">Undo last tap</button>
+    </div>
+    <div id="deckNote" class="sub" style="display:none"></div>
+  </section>
+
+  <section class="group" id="teamsCard" aria-label="Teams">
+    <h2>Teams</h2>
+    <div id="teams"></div>
+    <button type="button" id="addTeamBtn" class="wide" style="display:none">Add third team</button>
+    <div id="teamError" class="err" role="alert" style="display:none"></div>
+  </section>
+</div>
+
+<div id="bar"><button type="button" id="mainBtn" class="primary" disabled>Connecting...</button></div>
+
+<div id="settings" style="display:none"><div class="page">
+  <div class="head"><h1>Settings</h1><button type="button" id="setClose">Close</button></div>
+  <section class="group" id="setGuess" style="display:none">
+    <button type="button" id="turnRole" class="wide">I'm guessing now</button>
+  </section>
+  <section class="group" id="tvCard">
+    <button type="button" id="tvSwitch" class="wide" aria-pressed="false"></button>
+  </section>
+  <section class="group" aria-label="Add a movie">
+    <h2>Add a movie</h2>
+    <form id="promptForm" class="add" action="#" autocomplete="off">
+      <input id="promptInput" type="text" maxlength="60" placeholder="Movie name" aria-label="Movie name" autocomplete="off" enterkeyhint="done">
+      <button type="submit">Add</button>
+    </form>
+    <div id="promptError" class="err" role="alert" style="display:none"></div>
+  </section>
+  <section class="group" aria-label="How to play">
+    <h2>How to play</h2>
+    <ol class="how">
+      <li>When a turn starts, one player taps I'm guessing. Everyone else taps Show me the movie.</li>
+      <li>The team acts it out. No words, no mouthing. Sound effects are fine.</li>
+      <li>Someone from the other team is the referee: Got it when guessed, Foul if the actors talk.</li>
+      <li>60 seconds. Each guess is 1 point. Every 5 in a row gives 3 extra.</li>
+      <li>The first 2 skips in a turn are free, then each costs 1 point.</li>
+      <li>The remote works too: OK got it, Right skip, Down foul, Up pause, Left undo. With no phones, press Up on the TV before a turn to show the movie there.</li>
+    </ol>
+  </section>
+  <button type="button" id="resetBtn" class="wide quiet">Reset game</button>
+</div></div>
+
+<div id="toast" role="status" style="display:none"></div>
+
+<div id="modal" role="dialog" aria-modal="true" style="display:none">
+  <div id="modalBox">
+    <p id="modalText"></p>
+    <div id="modalRow">
+      <button type="button" id="modalNo">Cancel</button>
+      <button type="button" id="modalYes" class="primary">Yes</button>
+    </div>
+  </div>
+</div>
+
+<script src="/shared/hub-client.js"></script>
+<script>
+(function () {
+  /* state never holds the prompt. Only a phone whose owner chose "acting or refereeing" calls the prompt route,
+     and only during performing. A guessing phone, or one with no role yet, never asks for it at all. */
+  var APP = 'reverse-charades';
+  var STATE_URL = '/api/app/' + APP + '/state';
+  var PROMPT_URL = '/api/app/' + APP + '/prompt';
+  var ROLE_KEY = 'reverse-charades-role';
+  var PROMPT_POLL_MS = 500;
+  var COUNTDOWN_POLL_MS = 250;
+  var PROMPT_MAX_PX = 110, PROMPT_MIN_PX = 20;
+  var ACTION_URL = '/api/app/' + APP + '/action';
+  var TURN_POLL_MS = 500;
+  var IDLE_POLL_MS = 1000;
+  var STATE_TIMEOUT_MS = 5000;
+  var ACTION_TIMEOUT_MS = 8000;
+  /* A second tap of a double tap would land on the next prompt, which the server cannot tell from a real tap. */
+  var TAP_LOCK_MS = 800;
+  /* After a button changes meaning, a tap that was meant for the old meaning must not count. */
+  var PHASE_LOCK_MS = 800;
+  var OFFLINE_TEXT = "Can't reach the TV. Check you are on the same WiFi.";
+  var MARKS = {
+    correct: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13 L9 20 L21 5" fill="none" stroke="#7cc49a" stroke-width="4"/></svg>',
+    skipped: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5 L12 12 L4 19 M13 5 L21 12 L13 19" fill="none" stroke="#d9b26a" stroke-width="3.5"/></svg>',
+    unguessed: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="#a9bfb7" stroke-width="3.5"/></svg>'
+  };
+  var OUTCOME_WORD = { correct: 'Got it', skipped: 'Skipped', unguessed: 'Time up' };
+
+  function byId(id) { return document.getElementById(id); }
+  function show(el, visible) {
+    var value = visible ? '' : 'none';
+    if (el.style.display !== value) { el.style.display = value; }
+  }
+  /* All names and custom text reach the page through textContent, so they are never read as HTML. */
+  function setText(el, text) {
+    if (el.textContent !== text) { el.textContent = text; }
+  }
+  function setDisabled(el, disabled) {
+    if (el.disabled !== disabled) { el.disabled = disabled; }
+  }
+  function setClass(el, name) {
+    if (el.className !== name) { el.className = name; }
+  }
+  function nowMs() { return new Date().getTime(); }
+
+  var els = {};
+  (function () {
+    var ids = ['banner', 'toast', 'turnView', 'betweenView', 'roleView', 'roleActor', 'roleGuess', 'guessView', 'gClock', 'gMain', 'gSwitch',
+      'undoLast', 'tvCard', 'tvSwitch', 'turnRole', 'setGuess', 'promptPanel', 'pBox', 'pText', 'pWait', 'pWaitMain', 'pWaitSub', 'pGuessBtn',
+      'tTeam', 'tClock',
+      'gotBtn', 'gotLabel', 'gotSub', 'gotCount', 'skipBtn', 'skipLabel', 'skipSub', 'skipCount',
+      'foulBtn', 'undoBtn', 'pauseBtn', 'tSmall', 'tScores',
+      'gameCard', 'teamsCard',
+      'round', 'who', 'guessLine', 'sumBox', 'sumHead', 'results', 'scores', 'deckNote',
+      'teams', 'addTeamBtn', 'teamError', 'promptForm', 'promptInput', 'promptError',
+      'resetBtn', 'bar', 'mainBtn', 'modal', 'modalText', 'modalNo', 'modalYes'];
+    for (var i = 0; i < ids.length; i++) { els[ids[i]] = byId(ids[i]); }
+  })();
+
+  /* ---------- network ---------- */
+
+  /* Non-ASCII is sent as \uXXXX so the body survives any server charset default. */
+  function toJsonBody(obj) {
+    return JSON.stringify(obj).replace(/[\u0080-￿]/g, function (c) {
+      return '\\u' + ('0000' + c.charCodeAt(0).toString(16)).slice(-4);
+    });
+  }
+
+  /* cb(ok, data, gotReply). gotReply is false when the TV could not be reached at all. */
+  function request(method, url, body, timeoutMs, cb) {
+    var finished = false;
+    function finish(ok, data, gotReply) {
+      if (finished) { return; }
+      finished = true;
+      cb(ok, data, gotReply);
+    }
+    var xhr = new XMLHttpRequest();
+    try {
+      xhr.open(method, url, true);
+      xhr.timeout = timeoutMs;
+      xhr.setRequestHeader('Cache-Control', 'no-cache');
+      if (body !== null) { xhr.setRequestHeader('Content-Type', 'application/json'); }
+      xhr.ontimeout = function () { finish(false, null, false); };
+      xhr.onerror = function () { finish(false, null, false); };
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState !== 4 || xhr.status === 0) { return; }
+        var data = null;
+        try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+        finish(xhr.status >= 200 && xhr.status < 300 && data !== null, data, true);
+      };
+      xhr.send(body);
+    } catch (e) {
+      finish(false, null, false);
+    }
+  }
+
+  /* ---------- messages and confirmation ---------- */
+
+  var toastTimer = null;
+  function toast(text, bad) {
+    els.toast.textContent = text;
+    els.toast.className = bad ? 'bad' : '';
+    show(els.toast, true);
+    if (toastTimer) { clearTimeout(toastTimer); }
+    toastTimer = setTimeout(function () { show(els.toast, false); }, bad ? 6000 : 2500);
+  }
+
+  /* Our own box rather than window.confirm: some QR scanner browsers silently refuse window.confirm. */
+  var modalYesFn = null;
+  function confirmBox(text, yesLabel, noLabel, yesFn) {
+    els.modalText.textContent = text;
+    els.modalYes.textContent = yesLabel;
+    els.modalNo.textContent = noLabel;
+    modalYesFn = yesFn;
+    show(els.modal, true);
+  }
+  els.modalNo.onclick = function () { modalYesFn = null; show(els.modal, false); };
+  els.modalYes.onclick = function () {
+    var fn = modalYesFn;
+    modalYesFn = null;
+    show(els.modal, false);
+    if (fn) { fn(); }
+  };
+
+  /* ---------- page position ---------- */
+
+  /* Runs fn, then scrolls by however much the thing the person is looking at moved. */
+  function keepPlace(fn) {
+    var anchor = null;
+    var active = document.activeElement;
+    if (active && active.tagName === 'INPUT') {
+      anchor = active;
+    } else if (window.pageYOffset > 0) {
+      var cards = [els.gameCard, els.teamsCard];
+      for (var i = 0; i < cards.length; i++) {
+        if (cards[i].getBoundingClientRect().top >= 0) { anchor = cards[i]; break; }
+      }
+    }
+    if (!anchor) { fn(); return; }
+    var before = anchor.getBoundingClientRect().top;
+    fn();
+    var moved = anchor.getBoundingClientRect().top - before;
+    if (moved !== 0) { window.scrollBy(0, moved); }
+  }
+
+  /* ---------- rendering ---------- */
+
+  var lastState = null;
+  var lastPhase = null;
+  var phaseLockUntil = 0;
+  var tapLockUntil = 0;
+  var tapLockTimer = null;
+  var busy = false;
+  var lastCounts = null;
+
+  function teamById(s, id) {
+    var list = s.teams || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === id) { return list[i]; }
+    }
+    return null;
+  }
+  function teamName(s) {
+    var t = teamById(s, s.currentTeamId);
+    return t ? t.name : '';
+  }
+  function nextTeamName(s) {
+    var list = s.teams || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === s.currentTeamId) { return list[(i + 1) % list.length].name; }
+    }
+    return '';
+  }
+  function isTurn(phase) { return phase === 'countdown' || phase === 'performing' || phase === 'paused'; }
+  function pluralPoints(n) { return (n === 1 || n === -1) ? '1 point' : n + ' points'; }
+
+  function flashBtn(el, cls) {
+    setClass(el, 'big ' + cls);
+    setTimeout(function () { setClass(el, 'big'); refreshLocal(); }, 180);
+  }
+
+  /* ---------- role ---------- */
+
+  var role = null;
+  try {
+    var savedRole = window.sessionStorage.getItem(ROLE_KEY);
+    if (savedRole === 'actor' || savedRole === 'guesser') { role = savedRole; }
+  } catch (e) { /* Some browsers refuse storage. The role then lasts as long as the page. */ }
+
+  /* A role lasts one turn. Last turn's actor may be this turn's guesser, so a carried-over role could show them
+     the answer. A new turn sends every phone back to the two choices. */
+  var ROLE_TURN_KEY = 'reverse-charades-role-turn';
+  var roleTurn = null;
+  try { roleTurn = window.sessionStorage.getItem(ROLE_TURN_KEY); } catch (e) { /* see above */ }
+
+  function turnKey(s) { return s.round + ':' + s.currentTeamId; }
+
+  function saveRoleTurn(key) {
+    roleTurn = key;
+    try {
+      if (key === null) { window.sessionStorage.removeItem(ROLE_TURN_KEY); } else { window.sessionStorage.setItem(ROLE_TURN_KEY, key); }
+    } catch (e) { /* see above */ }
+  }
+
+  function forgetRoleIfNewTurn(s) {
+    var key = turnKey(s);
+    if (!role) { return; }
+    if (roleTurn === null) { saveRoleTurn(key); return; }
+    if (roleTurn !== key) {
+      role = null;
+      saveRoleTurn(null);
+      try { window.sessionStorage.removeItem(ROLE_KEY); } catch (e) { /* see above */ }
+      clearPrompt();
+    }
+  }
+
+  function setRole(next) {
+    role = next;
+    try { window.sessionStorage.setItem(ROLE_KEY, next); } catch (e) { /* see above */ }
+    saveRoleTurn(lastState ? turnKey(lastState) : null);
+    if (next !== 'actor') { clearPrompt(); }
+    refreshLocal();
+    if (next === 'actor') { fetchPrompt(); }
+  }
+
+  function askBecomeActor() {
+    if (lastState && isTurn(lastState.phase)) {
+      confirmBox('This shows the movie on this phone. Only switch if you are not guessing.', 'Show me', 'Keep guessing', function () {
+        setRole('actor');
+      });
+    } else {
+      setRole('actor');
+    }
+  }
+
+  els.roleActor.onclick = function () { setRole('actor'); };
+  els.roleGuess.onclick = function () { setRole('guesser'); };
+  els.gSwitch.onclick = askBecomeActor;
+  els.pGuessBtn.onclick = function () { setRole('guesser'); };
+  els.turnRole.onclick = function () {
+    showSettings(false);
+    setRole('guesser');
+  };
+
+  /* ---------- the prompt, for acting or refereeing phones only ---------- */
+
+  var promptData = null;
+  var promptBusy = false;
+  var promptAgain = false;
+  var promptWantedFor = null;
+  var promptFitKey = null;
+  var promptShownId = null;
+  var panelFlashTimer = null;
+
+  function clearPrompt() {
+    promptData = null;
+    promptWantedFor = null;
+    promptFitKey = null;
+    promptShownId = null;
+    els.pText.textContent = '';
+  }
+
+  function fetchPrompt() {
+    if (role !== 'actor') { return; }
+    if (!lastState || lastState.phase !== 'performing') { return; }
+    if (promptBusy) { promptAgain = true; return; }
+    promptBusy = true;
+    request('GET', PROMPT_URL, null, STATE_TIMEOUT_MS, function (ok, data) {
+      promptBusy = false;
+      try {
+        /* The role may have changed while this was on its way. */
+        if (ok && data && role === 'actor') {
+          if (data.promptId) {
+            promptData = data;
+            /* A newer prompt than the state knows about means someone else just scored, so catch up now. */
+            if (lastState && lastState.promptId !== data.promptId) { poll(); }
+          } else {
+            promptData = null;
+            poll();
+          }
+          refreshLocal();
+        }
+      } catch (e) { /* The next round of polling puts it right. */ }
+      if (promptAgain) {
+        promptAgain = false;
+        fetchPrompt();
+      }
+    });
+  }
+
+  /* As large as the box allows, breaking only between words, with lines evened out so that no word sits alone. */
+  function fitPrompt(text) {
+    var key = text + '|' + window.innerWidth + '|' + window.innerHeight;
+    if (promptFitKey === key) { return; }
+    var el = els.pText, box = els.pBox;
+    var shown = text;
+    if (el.textContent !== shown) { el.textContent = shown; }
+    var W = box.clientWidth, H = box.clientHeight;
+    if (W <= 0 || H <= 0) { return; }
+    promptFitKey = key;
+
+    function fits(px) {
+      el.style.fontSize = px + 'px';
+      return el.offsetHeight <= H && el.scrollWidth <= W;
+    }
+    function largest(lo, hi) {
+      if (fits(hi)) { return hi; }
+      for (var n = 0; n < 9 && hi - lo > .5; n++) {
+        var mid = (lo + hi) / 2;
+        if (fits(mid)) { lo = mid; } else { hi = mid; }
+      }
+      return Math.floor(lo);
+    }
+
+    el.style.width = W + 'px';
+    el.style.wordWrap = 'normal';
+    el.style.overflowWrap = 'normal';
+    var px;
+    if (fits(PROMPT_MIN_PX)) {
+      px = largest(PROMPT_MIN_PX, PROMPT_MAX_PX);
+    } else {
+      /* One enormous word with no spaces. Breaking it is better than clipping it. */
+      el.style.wordWrap = 'break-word';
+      el.style.overflowWrap = 'break-word';
+      px = largest(12, PROMPT_MAX_PX);
+    }
+    el.style.fontSize = px + 'px';
+
+    var height = el.offsetHeight;
+    var lines = Math.round(height / (px * 1.08));
+    if (lines > 1) {
+      var lo = W / lines, hi = W;
+      for (var i = 0; i < 8; i++) {
+        var w = (lo + hi) / 2;
+        el.style.width = w + 'px';
+        if (el.offsetHeight === height && el.scrollWidth <= w) { hi = w; } else { lo = w; }
+      }
+      el.style.width = Math.min(W, Math.ceil(hi) + 2) + 'px';
+    }
+  }
+
+  function flashPanel(cls) {
+    setClass(els.promptPanel, cls);
+    if (panelFlashTimer) { clearTimeout(panelFlashTimer); }
+    panelFlashTimer = setTimeout(function () { setClass(els.promptPanel, ''); }, 450);
+  }
+
+  function renderPrompt(s) {
+    var performing = s.phase === 'performing';
+    show(els.pBox, performing);
+    show(els.pWait, !performing);
+    if (!performing) {
+      clearPrompt();
+      show(els.pGuessBtn, s.phase === 'countdown');
+      if (s.phase === 'countdown') {
+        setText(els.pWaitMain, 'Get ready');
+        setText(els.pWaitSub, s.guesser ? 'Guesser: ' + s.guesser : '');
+      } else {
+        setText(els.pWaitMain, 'Paused');
+        setText(els.pWaitSub, '');
+      }
+      return;
+    }
+    if (promptWantedFor !== s.promptId) {
+      promptWantedFor = s.promptId;
+      fetchPrompt();
+    }
+    /* Only ever shows the prompt the server says is current, so a tap never leaves an old one on screen. */
+    if (promptData && promptData.promptId === s.promptId) {
+      fitPrompt(promptData.text || '');
+      if (promptShownId !== promptData.promptId) {
+        promptShownId = promptData.promptId;
+        els.pText.className = '';
+        void els.pText.offsetWidth;
+        els.pText.className = 'pop';
+      }
+    } else {
+      promptFitKey = null;
+      fitPrompt('...');
+    }
+  }
+
+  /* ---------- during a turn ---------- */
+
+  function renderGuesser(s) {
+    var left = Math.max(0, Math.ceil(Number(s.secondsLeft) || 0));
+    var phase = s.phase;
+    setText(els.gClock, phase === 'countdown' ? String(Math.max(1, Math.ceil(Number(s.countdownLeft) || 1))) : String(left));
+    setClass(els.gClock, phase === 'performing' && left <= 10 ? 'low' : '');
+    setText(els.gMain, phase === 'paused' ? 'Paused' : (phase === 'countdown' ? 'Get ready' : 'Shout your guess!'));
+  }
+
+  function renderTurn(s) {
+    var t = s.turn || {};
+    var phase = s.phase;
+    var free = t.freeSkipsLeft || 0;
+    setText(els.tTeam, teamName(s));
+
+    var left = Math.max(0, Math.ceil(Number(s.secondsLeft) || 0));
+    var clock = phase === 'countdown' ? String(Math.max(1, Math.ceil(Number(s.countdownLeft) || 1))) : String(left);
+    setText(els.tClock, clock);
+    setClass(els.tClock, phase === 'performing' && left <= 10 ? 'low' : '');
+
+    renderPrompt(s);
+
+    /* A count going up means the server took it, so that is when the screen confirms. */
+    var counts = { correct: t.correct || 0, skips: t.skips || 0 };
+    if (lastCounts) {
+      if (counts.correct > lastCounts.correct) { flashBtn(els.gotBtn, 'flash'); flashPanel('good'); }
+      if (counts.skips > lastCounts.skips) { flashBtn(els.skipBtn, 'flash'); flashPanel('skip'); }
+    }
+    lastCounts = counts;
+
+    var locked = nowMs() < tapLockUntil || nowMs() < phaseLockUntil;
+    var flashing = els.gotBtn.className.indexOf('flash') >= 0 || els.skipBtn.className.indexOf('flash') >= 0;
+    var canScore = phase === 'performing' && !!s.promptId;
+
+    if (phase === 'paused') {
+      setText(els.gotLabel, 'Resume');
+      setText(els.gotSub, '');
+      setText(els.gotCount, '');
+      setText(els.skipLabel, 'End turn');
+      setText(els.skipSub, '');
+      setText(els.skipCount, '');
+      if (!flashing) {
+        setClass(els.gotBtn, 'big resume' + (locked ? ' locked' : ''));
+        setClass(els.skipBtn, 'big endturn');
+      }
+      setDisabled(els.gotBtn, false);
+      setDisabled(els.skipBtn, false);
+    } else {
+      setText(els.gotLabel, 'Got it');
+      setText(els.gotSub, '');
+      setText(els.gotCount, String(counts.correct));
+      setText(els.skipLabel, 'Skip');
+      setText(els.skipSub, free > 0 ? free + ' free' : 'Costs 1');
+      setText(els.skipCount, String(counts.skips));
+      if (!flashing) {
+        setClass(els.gotBtn, 'big' + (locked ? ' locked' : ''));
+        setClass(els.skipBtn, 'big' + (locked ? ' locked' : ''));
+      }
+      setDisabled(els.gotBtn, !canScore);
+      setDisabled(els.skipBtn, !canScore);
+    }
+    setDisabled(els.foulBtn, phase !== 'performing');
+    setDisabled(els.undoBtn, false);
+    setDisabled(els.pauseBtn, false);
+    show(els.foulBtn, phase !== 'paused');
+    show(els.pauseBtn, phase !== 'paused');
+
+    renderTurnScores(s);
+  }
+
+  var turnScoreSig = null;
+  function renderTurnScores(s) {
+    var list = s.teams || [];
+    var sig = JSON.stringify(list) + s.currentTeamId;
+    if (sig === turnScoreSig) { return; }
+    turnScoreSig = sig;
+    els.tScores.innerHTML = '';
+    for (var i = 0; i < list.length; i++) {
+      var d = document.createElement('div');
+      d.className = list[i].id === s.currentTeamId ? 'tile cur' : 'tile';
+      var n = document.createElement('span');
+      n.className = 'n';
+      n.textContent = list[i].name;
+      var b = document.createElement('b');
+      b.textContent = String(list[i].score || 0);
+      d.appendChild(n);
+      d.appendChild(b);
+      els.tScores.appendChild(d);
+    }
+  }
+
+  function renderGame(s) {
+    var phase = s.phase;
+    var name = teamName(s);
+    var ready = phase === 'ready';
+    setText(els.round, 'Round ' + (s.round || 1));
+    setText(els.who, phase === 'summary' ? name + ': turn over' : name + ' up next');
+    show(els.guessLine, ready);
+    setText(els.guessLine, (s.guesser ? 'Guesser: ' + s.guesser : 'Pick a guesser') + '. Referee: ' + (s.refereeTeamName || 'other team'));
+    setClass(els.tvSwitch, s.promptOnTv ? 'wide chosen' : 'wide');
+    setText(els.tvSwitch, 'Show movie on TV: ' + (s.promptOnTv ? 'On' : 'Off'));
+    els.tvSwitch.setAttribute('aria-pressed', s.promptOnTv ? 'true' : 'false');
+    setDisabled(els.tvSwitch, busy);
+    setDisabled(els.undoLast, busy);
+    show(els.sumBox, phase === 'summary');
+    if (phase === 'summary') {
+      setText(els.sumHead, pluralPoints((s.turn && s.turn.points) || 0));
+      renderResults(s);
+    } else {
+      resultsSig = null;
+    }
+    renderScores(s);
+    show(els.deckNote, !!s.deckNote);
+    setText(els.deckNote, s.deckNote || '');
+
+    var label = 'Please wait...';
+    if (ready) { label = 'Start'; }
+    if (phase === 'summary') { label = 'Next: ' + nextTeamName(s); }
+    setText(els.mainBtn, label);
+    setDisabled(els.mainBtn, busy || !(ready || phase === 'summary'));
+  }
+
+  var resultsSig = null;
+  function renderResults(s) {
+    var list = s.results || [];
+    var sig = JSON.stringify(list);
+    if (sig === resultsSig) { return; }
+    resultsSig = sig;
+    els.results.innerHTML = '';
+    for (var i = 0; i < list.length; i++) {
+      var r = list[i];
+      var li = document.createElement('li');
+      var m = document.createElement('span');
+      m.className = 'm';
+      var mark = MARKS.hasOwnProperty(r.outcome) ? r.outcome : 'unguessed';
+      m.innerHTML = MARKS[mark]; /* Fixed markup from this file. */
+      var tx = document.createElement('span');
+      tx.className = 'tx';
+      tx.textContent = r.text;
+      var oc = document.createElement('span');
+      oc.className = 'oc';
+      oc.textContent = OUTCOME_WORD[mark];
+      li.appendChild(m);
+      li.appendChild(tx);
+      li.appendChild(oc);
+      els.results.appendChild(li);
+    }
+  }
+
+  var scoreSig = null;
+  function renderScores(s) {
+    var list = s.teams || [];
+    var sig = JSON.stringify(list) + s.currentTeamId;
+    if (sig === scoreSig) { return; }
+    scoreSig = sig;
+    els.scores.innerHTML = '';
+    for (var i = 0; i < list.length; i++) {
+      var d = document.createElement('div');
+      d.className = list[i].id === s.currentTeamId ? 'tile cur' : 'tile';
+      var n = document.createElement('span');
+      n.className = 'n';
+      n.textContent = list[i].name;
+      var b = document.createElement('b');
+      b.textContent = String(list[i].score || 0);
+      d.appendChild(n);
+      d.appendChild(b);
+      els.scores.appendChild(d);
+    }
+  }
+
+  /* ---------- teams ---------- */
+
+  /* Blocks are kept and updated in place. A poll never replaces an input, or changes one being typed in. */
+  var teamBlocks = {};
+
+  function buildTeamBlock(id) {
+    var wrap = document.createElement('div');
+    wrap.className = 'teamBlock';
+
+    var nameForm = document.createElement('form');
+    nameForm.className = 'add';
+    nameForm.setAttribute('autocomplete', 'off');
+    var nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.className = 'teamName';
+    nameInput.maxLength = 20;
+    nameInput.setAttribute('aria-label', 'Team name');
+    nameInput.setAttribute('autocomplete', 'off');
+    nameForm.appendChild(nameInput);
+    wrap.appendChild(nameForm);
+
+    var list = document.createElement('ul');
+    list.className = 'mlist';
+    wrap.appendChild(list);
+
+    var memberForm = document.createElement('form');
+    memberForm.className = 'add';
+    memberForm.setAttribute('autocomplete', 'off');
+    var memberInput = document.createElement('input');
+    memberInput.type = 'text';
+    memberInput.maxLength = 30;
+    memberInput.placeholder = 'Add a name';
+    memberInput.setAttribute('aria-label', 'Add a name to this team');
+    memberInput.setAttribute('autocomplete', 'off');
+    var memberBtn = document.createElement('button');
+    memberBtn.type = 'submit';
+    memberBtn.textContent = 'Add';
+    memberForm.appendChild(memberInput);
+    memberForm.appendChild(memberBtn);
+    wrap.appendChild(memberForm);
+
+    var removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'wide quiet';
+    removeBtn.textContent = 'Remove team';
+    wrap.appendChild(removeBtn);
+
+    var block = { wrap: wrap, nameInput: nameInput, list: list, memberInput: memberInput, removeBtn: removeBtn, sig: null, serverName: '' };
+
+    nameInput.oninput = function () { show(els.teamError, false); };
+    wireForm(nameForm, nameInput, els.teamError, function (text) {
+      return { action: 'set_team_name', id: id, name: text };
+    }, function () { block.nameInput.blur(); });
+    /* No Rename button: leaving the box saves it, unless nothing changed. */
+    nameInput.onchange = function () {
+      if (nameInput.value !== block.serverName) { nameForm.onsubmit(); }
+    };
+    wireForm(memberForm, memberInput, els.teamError, function (text) {
+      return { action: 'add_member', teamId: id, name: text };
+    }, function () { memberInput.value = ''; });
+    removeBtn.onclick = function () {
+      confirmBox('Remove ' + block.serverName + ' and their score?', 'Remove', 'Keep', function () {
+        gameAction({ action: 'remove_team', id: id });
+      });
+    };
+    return block;
+  }
+
+  function renderTeams(s) {
+    var list = s.teams || [];
+    var seen = {};
+    for (var i = 0; i < list.length; i++) {
+      var t = list[i];
+      seen[t.id] = true;
+      var block = teamBlocks[t.id];
+      if (!block) {
+        block = buildTeamBlock(t.id);
+        teamBlocks[t.id] = block;
+      }
+      block.serverName = t.name;
+      if (document.activeElement !== block.nameInput && block.nameInput.value !== t.name) {
+        block.nameInput.value = t.name;
+      }
+      renderMembers(block, t);
+      /* The server refuses to remove the team whose summary is still showing, so that button is not offered. */
+      show(block.removeBtn, list.length > 2 && !(s.phase === 'summary' && t.id === s.currentTeamId));
+      if (els.teams.children[i] !== block.wrap) {
+        els.teams.insertBefore(block.wrap, els.teams.children[i] || null);
+      }
+    }
+    for (var id in teamBlocks) {
+      if (teamBlocks.hasOwnProperty(id) && !seen[id]) {
+        els.teams.removeChild(teamBlocks[id].wrap);
+        delete teamBlocks[id];
+      }
+    }
+    show(els.addTeamBtn, list.length < 3);
+  }
+
+  function renderMembers(block, t) {
+    var members = t.members || [];
+    var sig = JSON.stringify(members) + '|' + t.guesserIndex;
+    if (block.sig === sig) { return; }
+    block.sig = sig;
+    block.list.innerHTML = '';
+    for (var i = 0; i < members.length; i++) {
+      block.list.appendChild(buildMemberRow(t.id, i, members[i], i === t.guesserIndex));
+    }
+  }
+
+  function buildMemberRow(teamId, index, name, next) {
+    var li = document.createElement('li');
+    li.className = 'row';
+    var text = document.createElement('div');
+    text.className = 'grow';
+    text.textContent = name;
+    if (next) {
+      var tag = document.createElement('span');
+      tag.className = 'mnext';
+      tag.textContent = 'Next';
+      text.appendChild(tag);
+    }
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'x';
+    btn.textContent = '\u00d7';
+    btn.setAttribute('aria-label', 'Remove ' + name);
+    btn.onclick = function () { gameAction({ action: 'remove_member', teamId: teamId, index: String(index) }); };
+    li.appendChild(text);
+    li.appendChild(btn);
+    return li;
+  }
+
+  /* ---------- applying state ---------- */
+
+  function applyState(s) {
+    lastState = s;
+    forgetRoleIfNewTurn(s);
+    /* The role question comes when a turn starts, so no phone carries a role into a new turn. */
+    if (s.phase === 'ready' && role) {
+      role = null;
+      saveRoleTurn(null);
+      try { window.sessionStorage.removeItem(ROLE_KEY); } catch (e) { /* see above */ }
+      clearPrompt();
+    }
+    if (s.phase !== lastPhase) {
+      /* The buttons now mean something else, so do not accept a tap for a moment. */
+      if (lastPhase !== null) { phaseLockUntil = nowMs() + PHASE_LOCK_MS; schedule(PHASE_LOCK_MS); }
+      if (isTurn(s.phase) && !isTurn(lastPhase) && document.activeElement && document.activeElement.blur) {
+        document.activeElement.blur();
+      }
+      if (!isTurn(s.phase)) { lastCounts = null; }
+      if (!isTurn(lastPhase) && isTurn(s.phase)) { window.scrollTo(0, 0); showSettings(false); }
+      lastPhase = s.phase;
+    }
+    var turn = isTurn(s.phase);
+    show(els.roleView, turn && !role);
+    show(els.guessView, turn && role === 'guesser');
+    show(els.turnView, turn && role === 'actor');
+    show(els.betweenView, !turn);
+    show(els.bar, !turn);
+    show(els.tvCard, !turn);
+    show(els.setGuess, turn && role === 'actor');
+    if (turn) {
+      if (role === 'actor') { renderTurn(s); } else if (role === 'guesser') { renderGuesser(s); }
+    } else {
+      clearPrompt();
+      keepPlace(function () {
+        renderGame(s);
+        renderTeams(s);
+      });
+      setDisabled(els.resetBtn, busy);
+    }
+  }
+
+  /* Draws again when a lock runs out, so the button stops looking dim. */
+  function schedule(ms) {
+    setTimeout(refreshLocal, ms + 20);
+  }
+
+  function refreshLocal() {
+    if (lastState) { applyState(lastState); }
+  }
+
+  function isState(data) {
+    return !!data && typeof data === 'object' && 'phase' in data;
+  }
+
+  /* ---------- polling ---------- */
+
+  var stateClock = 0;      /* increases with every state request and action reply */
+  var appliedClock = 0;    /* polls started before this point are out of date */
+  var pollBusy = false;
+  var pollAgain = false;
+  var pollTimer = null;
+  var pollCallbacks = [];
+  var failures = 0;
+
+  function pollDelay() {
+    if (lastState && lastState.phase === 'countdown') { return COUNTDOWN_POLL_MS; }
+    return lastState && isTurn(lastState.phase) ? TURN_POLL_MS : IDLE_POLL_MS;
+  }
+
+  function poll(cb) {
+    if (cb) { pollCallbacks.push(cb); }
+    if (pollBusy) { pollAgain = true; return; }
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+    pollBusy = true;
+    stateClock++;
+    var startedAt = stateClock;
+    var waiting = pollCallbacks;
+    pollCallbacks = [];
+    request('GET', STATE_URL, null, STATE_TIMEOUT_MS, function (ok, data) {
+      pollBusy = false;
+      try {
+        if (ok && isState(data)) {
+          failures = 0;
+          show(els.banner, false);
+          if (startedAt > appliedClock) { applyState(data); }
+        } else {
+          failures++;
+          if (failures >= 2) { show(els.banner, true); }
+        }
+      } catch (e) {
+        /* A bad reply must never stop the polling. */
+      }
+      for (var i = 0; i < waiting.length; i++) {
+        try { waiting[i](ok && isState(data) ? data : null); } catch (e2) { /* keep going */ }
+      }
+      if (pollAgain) {
+        pollAgain = false;
+        poll();
+      } else {
+        pollTimer = setTimeout(poll, pollDelay());
+      }
+    });
+  }
+
+  /* ---------- actions ---------- */
+
+  function applyReply(data) {
+    stateClock++;
+    appliedClock = stateClock;
+    applyState(data);
+  }
+
+  /* One at a time. A refused action means someone else got there first or the turn moved on, and that is harmless,
+     so during a turn the page just shows the new state. Between turns the server's message explains the problem. */
+  function gameAction(fields, onDone) {
+    if (busy) { return; }
+    busy = true;
+    refreshLocal();
+    request('POST', ACTION_URL, toJsonBody(fields), ACTION_TIMEOUT_MS, function (ok, data, gotReply) {
+      busy = false;
+      if (ok && isState(data)) {
+        applyReply(data);
+        if (onDone) { onDone(); }
+        return;
+      }
+      refreshLocal();
+      if (!gotReply) {
+        toast(OFFLINE_TEXT, true);
+      } else if (!lastState || !isTurn(lastState.phase)) {
+        toast(data && data.error ? String(data.error) : 'That did not work. Please try again.', true);
+      }
+      poll();
+    });
+  }
+
+  /* Got it and Skip. The promptId stops two phones scoring the same prompt. The lock stops one person's double tap
+     scoring the next prompt, which has its own new id by the time the second tap lands. */
+  function scoreTap(action) {
+    var s = lastState;
+    var t = nowMs();
+    if (role !== 'actor' || !s || s.phase !== 'performing' || !s.promptId || busy || t < tapLockUntil || t < phaseLockUntil) { return; }
+    tapLockUntil = t + TAP_LOCK_MS;
+    schedule(TAP_LOCK_MS);
+    if (navigator.vibrate) {
+      try { navigator.vibrate(40); } catch (e) { /* no buzz, no harm */ }
+    }
+    gameAction({ action: action, promptId: s.promptId });
+  }
+
+  els.gotBtn.onclick = function () {
+    var s = lastState;
+    if (s && s.phase === 'paused') {
+      if (nowMs() >= phaseLockUntil) { gameAction({ action: 'resume' }); }
+      return;
+    }
+    scoreTap('got_it');
+  };
+  els.skipBtn.onclick = function () {
+    var s = lastState;
+    if (s && s.phase === 'paused') {
+      if (nowMs() < phaseLockUntil) { return; }
+      confirmBox('End this turn now? Points so far stay.', 'End turn', 'Keep playing', function () {
+        gameAction({ action: 'end_turn' });
+      });
+      return;
+    }
+    scoreTap('skip');
+  };
+  els.foulBtn.onclick = function () { gameAction({ action: 'foul' }); };
+  els.undoBtn.onclick = function () { gameAction({ action: 'undo' }); };
+  els.pauseBtn.onclick = function () { gameAction({ action: 'pause' }); };
+
+  els.mainBtn.onclick = function () {
+    if (busy || !lastState || nowMs() < phaseLockUntil) { return; }
+    if (lastState.phase === 'ready') { gameAction({ action: 'start' }); }
+    else if (lastState.phase === 'summary') { gameAction({ action: 'next_turn' }); }
+  };
+  els.undoLast.onclick = function () { gameAction({ action: 'undo' }); };
+  els.tvSwitch.onclick = function () {
+    if (!lastState) { return; }
+    gameAction({ action: 'set_prompt_on_tv', on: lastState.promptOnTv ? 'false' : 'true' });
+  };
+  els.addTeamBtn.onclick = function () { gameAction({ action: 'add_team' }); };
+  els.resetBtn.onclick = function () {
+    confirmBox('Reset the game? Scores and movies start again. Teams and added movies stay.', 'Reset game', 'Cancel', function () {
+      gameAction({ action: 'reset_game' });
+    });
+  };
+
+  /* ---------- forms ---------- */
+
+  /* The typed text only goes away once the server has accepted it. These always show the server's message,
+     such as a duplicate name. */
+  function wireForm(form, input, errorEl, makeFields, onAccepted) {
+    var sending = false;
+    form.onsubmit = function (e) {
+      if (e && e.preventDefault) { e.preventDefault(); }
+      var text = input.value.replace(/^\s+|\s+$/g, '');
+      if (!text) { input.focus(); return false; }
+      if (sending) { return false; }
+      sending = true;
+      show(errorEl, false);
+      request('POST', ACTION_URL, toJsonBody(makeFields(text)), ACTION_TIMEOUT_MS, function (ok, data, gotReply) {
+        sending = false;
+        if (ok && isState(data)) {
+          onAccepted();
+          applyReply(data);
+          return;
+        }
+        var message = !gotReply ? OFFLINE_TEXT : (data && data.error ? String(data.error) : 'That did not work. Please try again.');
+        keepPlace(function () {
+          errorEl.textContent = message;
+          show(errorEl, true);
+        });
+      });
+      return false;
+    };
+  }
+
+  els.promptInput.oninput = function () { show(els.promptError, false); };
+  wireForm(els.promptForm, els.promptInput, els.promptError, function (text) {
+    return { action: 'add_prompt', text: text };
+  }, function () {
+    els.promptInput.value = '';
+    toast('Movie added.');
+  });
+
+  /* The on-screen keyboard needs the room, so the big button steps aside while typing. */
+  function typingChanged() {
+    var active = document.activeElement;
+    var typing = !!active && active.tagName === 'INPUT';
+    setClass(els.bar, typing ? 'typing' : '');
+  }
+  document.addEventListener('focus', typingChanged, true);
+  document.addEventListener('blur', function () { setTimeout(typingChanged, 0); }, true);
+
+  /* ---------- home ---------- */
+
+  var goingHome = false;
+  function askHome() {
+    confirmBox('Go back to the home screen? This moves the TV and every phone.', 'Go home', 'Stay', function () {
+      if (goingHome) { return; }
+      goingHome = true;
+      request('POST', '/api/hub/home', '{}', ACTION_TIMEOUT_MS, function (ok, data, gotReply) {
+        goingHome = false;
+        if (ok) {
+          location.replace('/');
+          return;
+        }
+        toast(!gotReply ? OFFLINE_TEXT : (data && data.error ? String(data.error) : 'That did not work. Please try again.'), true);
+      });
+    });
+  }
+  (function () {
+    var homes = document.querySelectorAll('.goHome');
+    for (var i = 0; i < homes.length; i++) { homes[i].onclick = askHome; }
+  })();
+
+  /* ---------- settings ---------- */
+
+  function showSettings(on) {
+    var box = document.getElementById('settings');
+    box.style.display = on ? '' : 'none';
+    document.documentElement.style.overflow = on ? 'hidden' : '';
+    if (on) { box.scrollTop = 0; }
+  }
+  (function () {
+    var open = document.querySelectorAll('.openSettings');
+    for (var i = 0; i < open.length; i++) { open[i].onclick = function () { showSettings(true); }; }
+    document.getElementById('setClose').onclick = function () { showSettings(false); };
+  })();
+
+  /* ---------- start ---------- */
+
+  window.onresize = function () { promptFitKey = null; refreshLocal(); };
+  /* A loop of its own, so a correct guess on any phone reaches this one straight away. */
+  setInterval(function () { try { fetchPrompt(); } catch (e) { /* carries on next time */ } }, PROMPT_POLL_MS);
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) { poll(); }
+  });
+  try {
+    if (window.HubClient) { window.HubClient.start({ kind: 'phone', app: APP }); }
+  } catch (e) {
+    /* The game still works from this page without it. */
+  }
+  poll();
+})();
+</script>
+</body>
+</html>

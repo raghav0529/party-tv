@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0c201b">
+<title>Pictionary</title>
+<style>
+/* Design tokens. Same in all three game pages. Gold marks only the one thing to do next. */
+:root {
+  --bg: #0c201b; --surface: #143630; --line: #2f5c52; --ink: #f3eee2; --muted: #a9bfb7; --gold: #d9b26a;
+  --alert: #e8806a;
+  --s1: 8px; --s2: 16px; --s3: 24px;
+  --t1: 16px; --t2: 20px; --t3: 28px; --t4: 44px;
+  /* The film-title voice: names and big moments only. Controls stay in the plain sans. */
+  --display: Georgia, "Noto Serif", "Droid Serif", "Noto Serif Devanagari", serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; overflow-anchor: none; }
+body { background: var(--bg); color: var(--ink); font-family: -apple-system, "Roboto", "Noto Sans", "Noto Sans Devanagari", "Droid Sans", "Segoe UI", "Mangal", Arial, sans-serif; font-size: var(--t2); line-height: 1.3; -webkit-text-size-adjust: 100%; word-wrap: break-word; overflow-wrap: break-word; }
+.hidden { display: none !important; }
+button { min-height: 56px; padding: var(--s1) var(--s2); border: 1px solid var(--line); border-radius: 12px; background: transparent; color: var(--ink); font: inherit; font-size: var(--t1); font-weight: 600; cursor: pointer; -webkit-appearance: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+button:active { background: var(--surface); }
+button.primary { min-height: 72px; border-radius: 16px; border-color: var(--gold); background: var(--gold); color: var(--bg); font-size: var(--t3); font-weight: 800; }
+button.primary:active { background: var(--ink); border-color: var(--ink); }
+button.quiet { border-color: transparent; color: var(--muted); font-weight: 500; }
+button.chosen { border-color: var(--gold); color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }
+button[disabled] { opacity: .45; cursor: default; }
+button.primary[disabled] { opacity: 1; background: var(--surface); border-color: var(--line); color: var(--muted); }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+input, select { width: 100%; min-width: 0; min-height: 56px; padding: var(--s1) var(--s2); border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); font: inherit; font-size: var(--t1); -webkit-appearance: none; }
+input::placeholder { color: var(--muted); opacity: 1; }
+input:focus { border-color: var(--gold); outline: none; }
+.wide { display: block; width: 100%; }
+.page { display: flex; flex-direction: column; gap: var(--s3); max-width: 640px; margin: 0 auto; padding: var(--s1) var(--s2) var(--s3); }
+.page.withBar { padding-bottom: 112px; }
+.head { display: flex; align-items: center; gap: var(--s1); }
+.head h1 { flex: 1 1 auto; min-width: 0; margin: 0; font-family: var(--display); font-size: var(--t2); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.head button { flex: 0 0 auto; padding: var(--s1); }
+.group { display: flex; flex-direction: column; gap: var(--s1); }
+h2 { margin: 0; color: var(--muted); font-size: var(--t1); font-weight: 600; }
+.pill { align-self: flex-start; padding: 4px 12px; border-radius: 99px; background: var(--surface); color: var(--muted); font-size: var(--t1); font-weight: 600; }
+.pill.live { background: var(--ink); color: var(--bg); }
+.title { font-family: var(--display); font-size: var(--t3); font-weight: 700; line-height: 1.15; }
+.sub { color: var(--muted); font-size: var(--t1); }
+.bigClock { font-size: var(--t4); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.low { color: var(--alert); }
+/* Score strip */
+.strip { display: flex; gap: var(--s2); }
+.tile { flex: 1 1 0; min-width: 0; display: flex; align-items: baseline; justify-content: space-between; gap: var(--s1); padding: var(--s1) 0; border-bottom: 2px solid var(--line); color: var(--muted); font-size: var(--t1); }
+.tile .n { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile b { flex: 0 0 auto; color: var(--ink); font-size: var(--t2); font-variant-numeric: tabular-nums; }
+.tile.cur { border-bottom-color: var(--gold); color: var(--ink); font-weight: 700; }
+/* Rows */
+.row { display: flex; align-items: center; gap: var(--s1); min-height: 56px; }
+.row .grow { flex: 1 1 auto; min-width: 0; }
+.x { flex: 0 0 56px; width: 56px; padding: 0; border-color: transparent; background: none; color: var(--muted); font-size: var(--t2); font-weight: 500; }
+.add { display: flex; gap: var(--s1); }
+.add input { flex: 1 1 auto; }
+.add button { flex: 0 0 auto; }
+.btnRow { display: flex; gap: var(--s1); }
+.btnRow button { flex: 1 1 0; min-width: 0; padding-left: var(--s1); padding-right: var(--s1); }
+/* Settings */
+#settings { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 8; overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; background: var(--bg); }
+.how { margin: 0; padding-left: var(--s3); font-size: var(--t1); color: var(--muted); }
+.how li + li { margin-top: var(--s1); }
+.err { padding: var(--s1) 12px; border: 1px solid var(--alert); border-radius: 12px; color: var(--ink); font-size: var(--t1); }
+/* Always on screen */
+#bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 3; padding: var(--s1) var(--s2) var(--s2); background: var(--bg); }
+#bar.typing { display: none; }
+#mainBtn { display: block; width: 100%; max-width: 608px; margin: 0 auto; line-height: 1.1; }
+#banner { position: fixed; top: 0; left: 0; right: 0; z-index: 10; padding: var(--s1) var(--s2); background: var(--ink); color: var(--bg); font-size: var(--t1); font-weight: 700; text-align: center; }
+#toast { position: fixed; left: var(--s2); right: var(--s2); bottom: 104px; z-index: 10; max-width: 480px; margin: 0 auto; padding: var(--s2); border-radius: 12px; background: var(--ink); color: var(--bg); font-size: var(--t1); font-weight: 700; }
+#toast.bad { background: var(--surface); border: 1px solid var(--alert); color: var(--ink); }
+#modal { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 20; padding: var(--s2); background: rgba(0, 0, 0, .8); }
+#modalBox { display: flex; flex-direction: column; gap: var(--s2); max-width: 460px; margin: 64px auto 0; padding: var(--s3) var(--s2) var(--s2); border-radius: 16px; background: var(--surface); }
+#modalText { margin: 0; font-size: var(--t2); }
+#modalRow { display: flex; gap: var(--s1); }
+#modalRow button { flex: 1 1 0; min-width: 0; min-height: 56px; font-size: var(--t1); font-weight: 700; }
+
+#gClock { align-self: flex-start; }
+#gotBtn, #nextBtn, #claimBtn { font-size: var(--t3); }
+#stealBox { display: flex; flex-direction: column; gap: var(--s1); }
+.choice { min-height: 72px; font-size: var(--t2); font-weight: 700; }
+#gPrompt { font-family: var(--display); font-size: var(--t4); font-weight: 700; line-height: 1.1; }
+#gResult { color: var(--muted); font-size: var(--t2); }
+#teams { display: flex; flex-direction: column; gap: var(--s1); }
+.teamName { background: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding-left: 0; font-size: var(--t2); font-weight: 700; }
+#msg { position: fixed; left: var(--s2); right: var(--s2); bottom: var(--s2); z-index: 30; padding: var(--s2); border: 1px solid var(--alert); border-radius: 12px; background: var(--surface); font-size: var(--t1); }
+#box { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 40; display: flex; align-items: center; justify-content: center; padding: var(--s2); background: rgba(0,0,0,.8); }
+#boxInner { display: flex; flex-direction: column; gap: var(--s2); width: 100%; max-width: 420px; padding: var(--s3) var(--s2) var(--s2); border-radius: 16px; background: var(--surface); }
+#boxText { margin: 0; font-size: var(--t2); }
+#boxInner button { min-height: 56px; font-size: var(--t1); font-weight: 700; }
+
+/* Drawer: fixed to the screen, so nothing can scroll */
+html.drawing, html.drawing body { height: 100%; overflow: hidden; overscroll-behavior: none; touch-action: none; position: fixed; left: 0; right: 0; top: 0; bottom: 0; }
+#drawer { position: fixed; left: 0; right: 0; top: 0; bottom: 0; display: flex; flex-direction: column; gap: var(--s1); padding: var(--s1); background: var(--bg); touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+#dBar { flex: 0 0 auto; display: flex; align-items: center; gap: var(--s1); }
+#dPrompt { flex: 1 1 auto; min-width: 0; min-height: 56px; border-radius: 12px; border: 0; background: var(--surface); color: var(--ink); font-family: var(--display); font-size: var(--t2); font-weight: 700; line-height: 1.1; text-align: left; }
+#dPrompt.covered { color: var(--muted); font-size: var(--t1); font-weight: 500; }
+#dClock { flex: 0 0 64px; font-size: var(--t3); font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; }
+#dMain { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: var(--s1); }
+#dBox { flex: 1 1 auto; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; }
+#dCanvas { display: block; border-radius: 8px; background: #f3eee2; touch-action: none; }
+#dOver { position: absolute; left: 0; right: 0; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; padding: var(--s2); background: rgba(12,32,27,.88); font-size: var(--t2); font-weight: 700; text-align: center; }
+#dTools { flex: 0 0 auto; display: flex; flex-direction: column; gap: var(--s1); }
+.tRow { display: flex; gap: var(--s1); }
+.tRow button { flex: 1 1 0; min-width: 0; padding: 0; }
+.swatch { border-color: transparent; }
+.swatch.on { box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--ink); }
+.sz.on { border-color: var(--ink); background: var(--surface); }
+.dot { display: inline-block; background: currentColor; border-radius: 50%; vertical-align: middle; }
+#dLimit { color: var(--alert); font-size: var(--t1); text-align: center; }
+html.side #dMain { flex-direction: row; }
+html.side #dTools { width: 164px; overflow: hidden; }
+html.side .tRow button { min-height: 44px; }
+html.side #dBar { min-height: 40px; }
+html.side #dPrompt { min-height: 40px; }
+
+/* Reading the word before the clock runs */
+#dRead { position: absolute; left: 0; right: 0; top: 0; bottom: 0; z-index: 5; display: flex; flex-direction: column; justify-content: center; gap: var(--s2); padding: var(--s3) var(--s2); background: var(--bg); overflow: hidden; }
+#rPrompt { font-family: var(--display); font-size: var(--t4); font-weight: 700; line-height: 1.1; }
+#rHard { color: var(--gold); font-size: var(--t1); font-weight: 700; }
+</style>
+</head>
+<body>
+<div id="normal" class="page">
+  <div class="head"><h1>Pictionary</h1><button type="button" class="quiet openSettings">Settings</button><button type="button" class="quiet goHome">Home</button></div>
+  <div id="strip" class="strip"></div>
+
+  <section class="group" id="game">
+    <span class="pill" id="gPill"></span>
+    <div class="title" id="gWho"></div>
+    <div class="sub hidden" id="gHint"></div>
+    <div id="gClock" class="bigClock hidden"></div>
+    <div id="sumBox" class="group hidden"><div id="gPrompt"></div><div id="gResult"></div></div>
+    <div id="claimBox" class="group hidden">
+      <input id="nameInput" type="text" maxlength="20" placeholder="Your name (optional)" aria-label="Your name" autocomplete="off">
+      <button type="button" id="claimBtn" class="primary wide">I'll draw</button>
+    </div>
+    <button type="button" id="gotBtn" class="primary wide hidden">Got it</button>
+    <div id="stealBox" class="hidden"></div>
+    <button type="button" id="nextBtn" class="primary wide hidden">Next team</button>
+    <div class="btnRow">
+      <button type="button" id="pauseBtn" class="hidden">Pause</button>
+      <button type="button" id="takeBtn" class="quiet hidden">Take over</button>
+    </div>
+  </section>
+
+  <section class="group">
+    <h2>Teams</h2>
+    <div id="teams"></div>
+    <button type="button" id="addTeamBtn" class="wide">Add third team</button>
+  </section>
+</div>
+
+<div id="settings" style="display:none"><div class="page">
+  <div class="head"><h1>Settings</h1><button type="button" id="setClose">Close</button></div>
+  <section class="group">
+    <h2>Add a word</h2>
+    <div class="add"><input id="promptInput" type="text" maxlength="40" placeholder="Something to draw" aria-label="Something to draw" autocomplete="off"><button type="button" id="promptBtn">Add</button></div>
+    <div class="sub" id="promptNote">Joins from round 2.</div>
+  </section>
+  <section class="group">
+    <h2>How to play</h2>
+    <ol class="how">
+      <li>One person taps I'll draw and reads the secret word on their phone.</li>
+      <li>They tap Start. The drawing shows on the TV and their team shouts guesses.</li>
+      <li>Someone not drawing taps Got it, on a phone or with OK on the remote.</li>
+      <li>Guessed in the first 20 seconds: 3 points. After that: 2. Hard words: 1 more.</li>
+      <li>One free skip per turn. No letters or numbers in the drawing.</li>
+      <li>Time up: the other teams get 10 seconds to shout, for 1 point.</li>
+    </ol>
+  </section>
+  <button type="button" id="resetBtn" class="quiet wide">Reset game</button>
+</div></div>
+
+<div id="drawer" class="hidden">
+  <div id="dBar">
+    <button type="button" id="dPrompt"></button>
+    <div id="dClock"></div>
+  </div>
+  <div id="dMain">
+    <div id="dBox">
+      <canvas id="dCanvas" width="1280" height="720"></canvas>
+      <div id="dOver" class="hidden"></div>
+    </div>
+    <div id="dTools">
+      <div class="tRow" id="colourRow"></div>
+      <div class="tRow" id="sizeRow"></div>
+      <div class="tRow">
+        <button type="button" id="undoBtn">Undo</button>
+        <button type="button" id="clearBtn">Clear</button>
+        <button type="button" id="skipBtn">Skip</button>
+      </div>
+      <div id="dLimit" class="hidden">Canvas full. Undo or Clear.</div>
+    </div>
+  </div>
+  <div id="dRead" class="hidden">
+    <span class="pill live">Don't show your team</span>
+    <div id="rPrompt"></div>
+    <div id="rHard" class="hidden">Hard word: 1 extra point</div>
+    <button type="button" id="rStart" class="primary wide">Start drawing</button>
+    <div id="rClock" class="sub"></div>
+  </div>
+</div>
+
+<div id="msg" class="hidden"></div>
+<div id="box" class="hidden"><div id="boxInner">
+  <p id="boxText"></p>
+  <div class="btnRow"><button type="button" id="boxYes" class="primary"></button><button type="button" id="boxNo"></button></div>
+</div></div>
+
+<script src="/shared/hub-client.js"></script>
+<script>
+(function () {
+  var APP = 'pictionary';
+  var BASE = '/api/app/' + APP + '/';
+  var TOKEN_KEY = 'pictionaryToken';
+  var FLUSH_MS = 200;
+  var MAX_BATCH = 1500;
+  var COLOURS = { black: '#1c1512', red: '#d3201a', blue: '#1257c4', green: '#12812f', orange: '#f07a00', purple: '#7b1fa2' };
+  var ORDER = ['black', 'red', 'blue', 'green', 'orange', 'purple'];
+  var LINE = { 1: 7, 2: 14, 3: 28 };
+  var W = 1280, H = 720;
+  var PAPER = '#f3eee2';
+
+  function $(id) { return document.getElementById(id); }
+  function show(el, on) {
+    if (typeof el === 'string') { el = $(el); }
+    var c = el.className.replace(/(^| )hidden( |$)/, ' ').replace(/^ +| +$/g, '');
+    el.className = on ? c : (c ? c + ' hidden' : 'hidden');
+  }
+  function setText(el, text) {
+    if (typeof el === 'string') { el = $(el); }
+    if (el.__text !== text) { el.__text = text; el.textContent = text; }
+  }
+
+  /* done(status, data). status 0 means the network failed. */
+  function request(method, path, body, done) {
+    var xhr = new XMLHttpRequest();
+    var finished = false;
+    function finish(status) {
+      if (finished) { return; }
+      finished = true;
+      var data = null;
+      try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+      try { done(status, data); } catch (e) { if (window.console) { console.log(e); } }
+    }
+    try {
+      xhr.open(method, BASE + path, true);
+      xhr.timeout = 4000;
+      if (body) { xhr.setRequestHeader('Content-Type', 'application/json'); }
+      xhr.onreadystatechange = function () { if (xhr.readyState === 4) { finish(xhr.status); } };
+      xhr.ontimeout = function () { finish(0); };
+      xhr.send(body ? JSON.stringify(body) : null);
+    } catch (e) {
+      finish(0);
+    }
+  }
+
+  var msgTimer = null;
+  function message(text) {
+    setText('msg', text);
+    show('msg', true);
+    if (msgTimer) { clearTimeout(msgTimer); }
+    msgTimer = setTimeout(function () { show('msg', false); }, 4000);
+  }
+
+  /* Our own box rather than window.confirm: some QR scanner browsers silently refuse window.confirm. */
+  var boxYesFn = null;
+  function confirmBox(text, yes, no, fn) {
+    setText('boxText', text);
+    setText('boxYes', yes);
+    setText('boxNo', no);
+    boxYesFn = fn;
+    show('box', true);
+  }
+  $('boxYes').onclick = function () { show('box', false); var f = boxYesFn; boxYesFn = null; if (f) { f(); } };
+  $('boxNo').onclick = function () { show('box', false); boxYesFn = null; };
+
+  // ----- Role -----
+  var st = null;
+  var token = null;
+  try { token = window.sessionStorage.getItem(TOKEN_KEY); } catch (e) { token = null; }
+  var prompt = null, promptHard = false, promptForId = null, promptBusy = false;
+  var restored = false;
+
+  function saveToken(t) {
+    token = t;
+    try {
+      if (t) { window.sessionStorage.setItem(TOKEN_KEY, t); } else { window.sessionStorage.removeItem(TOKEN_KEY); }
+    } catch (e) {}
+  }
+
+  function dropRole(why) {
+    saveToken(null);
+    prompt = null;
+    promptForId = null;
+    promptHard = false;
+    restored = false;
+    strokes = [];
+    ops = [];
+    current = null;
+    limited = false;
+    if (why) { message(why); }
+  }
+
+  function fetchPrompt() {
+    if (promptBusy || !token) { return; }
+    promptBusy = true;
+    var asked = token;
+    request('POST', 'drawer', { token: asked }, function (status, r) {
+      promptBusy = false;
+      if (token !== asked) { return; }
+      if (status === 200 && r) {
+        promptForId = r.promptId;
+        prompt = r.prompt;
+        promptHard = r.hard;
+        if (st) { render(); }
+      } else if (status === 400) {
+        dropRole(st && st.phase !== 'summary' && st.phase !== 'ready' ? 'Another phone has taken over the drawing.' : null);
+        if (st) { render(); }
+      }
+    });
+  }
+
+  /* After a page refresh the phone gets its own drawing back from the server. */
+  function restoreDrawing() {
+    if (restored || !token) { return; }
+    restored = true;
+    request('GET', 'strokes?since=0', null, function (status, r) {
+      if (status !== 200 || !r) { restored = false; return; }
+      for (var i = 0; i < r.strokes.length; i++) {
+        var s = r.strokes[i];
+        strokes.push({ id: s.id, color: s.color, size: s.size, xy: s.points, sent: s.points.length / 2 });
+      }
+      redraw();
+    });
+  }
+
+  // ----- Local drawing -----
+  var canvas = $('dCanvas');
+  var ink = canvas.getContext('2d');
+  var strokes = [];
+  var current = null;
+  var ops = [];
+  var colour = 'black', size = 2;
+  var limited = false;
+  var pagePrefix = 'p' + Math.floor(Math.random() * 2176782336).toString(36);
+  var strokeCount = 0;
+
+  function segment(s, fromPoint) {
+    var n = s.xy.length / 2;
+    if (fromPoint >= n) { return; }
+    ink.strokeStyle = COLOURS[s.color];
+    ink.fillStyle = COLOURS[s.color];
+    ink.lineWidth = LINE[s.size];
+    ink.lineCap = 'round';
+    ink.lineJoin = 'round';
+    ink.beginPath();
+    if (n === 1) {
+      ink.arc(s.xy[0] * W / 1000, s.xy[1] * H / 1000, ink.lineWidth / 2, 0, Math.PI * 2);
+      ink.fill();
+      return;
+    }
+    var start = Math.max(0, fromPoint - 1);
+    ink.moveTo(s.xy[start * 2] * W / 1000, s.xy[start * 2 + 1] * H / 1000);
+    for (var i = start + 1; i < n; i++) { ink.lineTo(s.xy[i * 2] * W / 1000, s.xy[i * 2 + 1] * H / 1000); }
+    ink.stroke();
+  }
+
+  function redraw() {
+    ink.fillStyle = PAPER;
+    ink.fillRect(0, 0, W, H);
+    for (var i = 0; i < strokes.length; i++) { segment(strokes[i], 0); }
+  }
+
+  function canDraw() {
+    return !!token && st && st.phase === 'drawing' && !limited;
+  }
+
+  function toPoint(clientX, clientY) {
+    var r = canvas.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) { return null; }
+    var x = Math.round((clientX - r.left) / r.width * 1000);
+    var y = Math.round((clientY - r.top) / r.height * 1000);
+    return [Math.max(0, Math.min(1000, x)), Math.max(0, Math.min(1000, y))];
+  }
+
+  function begin(clientX, clientY) {
+    if (!canDraw()) { return; }
+    var p = toPoint(clientX, clientY);
+    if (!p) { return; }
+    strokeCount++;
+    current = { id: pagePrefix + '-' + strokeCount, color: colour, size: size, xy: [p[0], p[1]], sent: 0 };
+    strokes.push(current);
+    segment(current, 0);
+  }
+
+  function extend(clientX, clientY) {
+    if (!current || !canDraw()) { return; }
+    var p = toPoint(clientX, clientY);
+    if (!p) { return; }
+    var n = current.xy.length;
+    var dx = p[0] - current.xy[n - 2], dy = p[1] - current.xy[n - 1];
+    if (dx * dx + dy * dy < 4) { return; }
+    current.xy.push(p[0], p[1]);
+    segment(current, current.xy.length / 2 - 1);
+  }
+
+  function finishStroke() { current = null; }
+
+  var touchId = null;
+  function findTouch(list) {
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].identifier === touchId) { return list[i]; }
+    }
+    return null;
+  }
+  var NOT_PASSIVE = { passive: false };
+  canvas.addEventListener('touchstart', function (e) {
+    e.preventDefault();
+    if (touchId !== null) { return; } // A second finger or a resting palm never starts another line.
+    var t = e.changedTouches[0];
+    touchId = t.identifier;
+    begin(t.clientX, t.clientY);
+  }, NOT_PASSIVE);
+  canvas.addEventListener('touchmove', function (e) {
+    e.preventDefault();
+    var t = findTouch(e.changedTouches);
+    if (t) { extend(t.clientX, t.clientY); }
+  }, NOT_PASSIVE);
+  function touchDone(e) {
+    e.preventDefault();
+    var t = findTouch(e.changedTouches);
+    if (t) { touchId = null; finishStroke(); }
+  }
+  canvas.addEventListener('touchend', touchDone, NOT_PASSIVE);
+  canvas.addEventListener('touchcancel', touchDone, NOT_PASSIVE);
+
+  /* Old browsers ignore touch-action, so while drawing nothing on this page may scroll or zoom. */
+  function blockWhileDrawing(e) {
+    if (token && !$('drawer').__hidden) { e.preventDefault(); }
+  }
+  document.addEventListener('touchmove', blockWhileDrawing, NOT_PASSIVE);
+  document.addEventListener('gesturestart', blockWhileDrawing, NOT_PASSIVE);
+
+  var mouseDown = false;
+  canvas.addEventListener('mousedown', function (e) { mouseDown = true; begin(e.clientX, e.clientY); e.preventDefault(); });
+  document.addEventListener('mousemove', function (e) { if (mouseDown) { extend(e.clientX, e.clientY); } });
+  document.addEventListener('mouseup', function () { if (mouseDown) { mouseDown = false; finishStroke(); } });
+
+  // ----- Sending, in order, one request at a time. Nothing is forgotten until the server has it. -----
+  var inFlight = false, refusals = 0;
+
+  function collect() {
+    var batch = [], used = [], room = MAX_BATCH;
+    for (var i = 0; i < strokes.length && room > 0; i++) {
+      var s = strokes[i];
+      var have = s.xy.length / 2;
+      if (s.sent >= have) { continue; }
+      var take = Math.min(have - s.sent, room);
+      batch.push({ id: s.id, color: s.color, size: s.size, from: s.sent, points: s.xy.slice(s.sent * 2, (s.sent + take) * 2) });
+      used.push({ stroke: s, count: take });
+      room -= take;
+    }
+    return { batch: batch, used: used };
+  }
+
+  function mayDrawNow() {
+    if (!st) { return false; }
+    return st.phase === 'drawing' || (st.phase === 'steal' && st.msLeft > 9000);
+  }
+
+  function flush() {
+    if (inFlight || !token) { return; }
+    if (ops.length) {
+      var op = ops[0];
+      var body = { action: op.action, token: token };
+      if (op.strokeId) { body.strokeId = op.strokeId; }
+      inFlight = true;
+      request('POST', 'action', body, function (status, r) {
+        inFlight = false;
+        if (status === 200 && r) {
+          ops.shift();
+          refusals = 0;
+          applyState(r);
+        } else if (status === 400) {
+          // Probably paused for a moment. Try a few times, then let it go.
+          refusals++;
+          if (refusals >= 3 && !(st && st.phase === 'paused')) { ops.shift(); refusals = 0; }
+          fetchPrompt();
+        }
+      });
+      return;
+    }
+    if (!mayDrawNow()) { return; }
+    var c = collect();
+    if (!c.batch.length) { return; }
+    inFlight = true;
+    request('POST', 'action', { action: 'draw', token: token, strokes: JSON.stringify(c.batch) }, function (status, r) {
+      inFlight = false;
+      if (status === 200 && r) {
+        for (var i = 0; i < c.used.length; i++) { c.used[i].stroke.sent += c.used[i].count; }
+        refusals = 0;
+        if (r.limited) { limited = true; finishStroke(); }
+        applyState(r);
+      } else if (status === 400) {
+        // Paused or a dead token: the check below sorts that out. Points stay, unless the server keeps refusing them.
+        refusals++;
+        if (refusals >= 4 && st && st.phase === 'drawing') {
+          for (var j = 0; j < c.used.length; j++) { c.used[j].stroke.sent += c.used[j].count; }
+          refusals = 0;
+        }
+        promptForId = null;
+        fetchPrompt();
+        pollState();
+      }
+    });
+  }
+  window.__picPending = function () {
+    var n = 0;
+    for (var i = 0; i < strokes.length; i++) { n += strokes[i].xy.length / 2 - strokes[i].sent; }
+    return n + ops.length;
+  };
+
+  function undo() {
+    if (!canUseTools() || !strokes.length) { return; }
+    var s = strokes.pop();
+    if (s === current) { current = null; }
+    limited = false;
+    ops.push({ action: 'undo_stroke', strokeId: s.id });
+    redraw();
+  }
+
+  function wipeLocal() {
+    strokes = [];
+    current = null;
+    limited = false;
+    redraw();
+  }
+
+  function canUseTools() { return !!token && st && st.phase === 'drawing'; }
+
+  // ----- Rendering the drawer -----
+  var promptCovered = false;
+
+  function layoutCanvas() {
+    if ($('drawer').__hidden) { return; }
+    var side = window.innerWidth > window.innerHeight;
+    document.documentElement.className = side ? 'drawing side' : 'drawing';
+    var box = $('dBox');
+    var bw = box.clientWidth, bh = box.clientHeight;
+    if (bw <= 0 || bh <= 0) { return; }
+    var w = Math.min(bw, bh * 16 / 9);
+    canvas.style.width = Math.floor(w) + 'px';
+    canvas.style.height = Math.floor(w * 9 / 16) + 'px';
+  }
+  window.addEventListener('resize', function () { layoutCanvas(); });
+  window.addEventListener('orientationchange', function () { setTimeout(layoutCanvas, 200); });
+
+  function renderDrawer() {
+    var phase = st.phase;
+    var from = phase === 'paused' ? st.pausedFrom : phase;
+    var reading = from === 'claimed' && phase !== 'paused';
+    show('dRead', reading);
+    if (reading) {
+      setText('rPrompt', prompt === null ? 'Loading...' : prompt);
+      show('rHard', !!promptHard);
+      setText('rClock', 'Clock starts in ' + st.secondsLeft);
+    }
+    setText('dPrompt', promptCovered ? 'Tap to show word' : (prompt === null ? '' : prompt));
+    $('dPrompt').className = promptCovered ? 'covered' : '';
+    setText('dClock', String(st.secondsLeft));
+    $('dClock').className = phase === 'drawing' && st.secondsLeft <= 10 ? 'low' : '';
+    var over = null;
+    if (phase === 'paused') { over = 'Paused'; }
+    else if (phase === 'steal') { over = 'Time up. Stay quiet.'; }
+    show('dOver', over !== null);
+    if (over !== null) { setText('dOver', over); }
+    show('dLimit', limited);
+    var tools = phase === 'drawing';
+    $('undoBtn').disabled = !tools;
+    $('clearBtn').disabled = !tools;
+    $('skipBtn').disabled = !tools || st.skipLeft < 1;
+    setText('skipBtn', st.skipLeft > 0 ? 'Skip' : 'Skipped');
+  }
+
+  // ----- Rendering everyone else -----
+  function renderTeams() {
+    var box = $('teams');
+    var key = '';
+    var i;
+    for (i = 0; i < st.teams.length; i++) { key += st.teams[i].id + ','; }
+    if (box.__key !== key && !(document.activeElement && document.activeElement.className === 'teamName')) {
+      box.__key = key;
+      while (box.firstChild) { box.removeChild(box.firstChild); }
+      for (i = 0; i < st.teams.length; i++) { box.appendChild(teamRow(st.teams[i])); }
+    }
+    for (i = 0; i < box.childNodes.length; i++) {
+      var row = box.childNodes[i];
+      for (var j = 0; j < st.teams.length; j++) {
+        var t = st.teams[j];
+        if (t.id !== row.__id) { continue; }
+        if (document.activeElement !== row.__input && row.__input.value !== t.name) { row.__input.value = t.name; }
+        show(row.__remove, st.teams.length > 2 && between());
+      }
+    }
+    show('addTeamBtn', st.teams.length < 3 && between());
+  }
+
+  function between() { return st.phase === 'ready' || st.phase === 'summary'; }
+
+  function teamRow(t) {
+    var row = document.createElement('div');
+    row.className = 'row';
+    row.__id = t.id;
+    var input = document.createElement('input');
+    input.className = 'teamName';
+    input.type = 'text';
+    input.maxLength = 20;
+    input.value = t.name;
+    input.onchange = function () { act({ action: 'set_team_name', id: t.id, name: input.value }); };
+    var remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'x hidden';
+    remove.textContent = '\u00d7';
+    remove.setAttribute('aria-label', 'Remove team');
+    remove.onclick = function () {
+      confirmBox('Remove this team and its score?', 'Remove', 'Keep', function () { act({ action: 'remove_team', id: t.id }); });
+    };
+    row.appendChild(input);
+    row.appendChild(remove);
+    row.__input = input;
+    row.__remove = remove;
+    return row;
+  }
+
+  function renderSteal() {
+    var box = $('stealBox');
+    var key = '';
+    var i;
+    for (i = 0; i < st.teams.length; i++) {
+      if (st.teams[i].id !== st.currentTeamId) { key += st.teams[i].id + '|' + st.teams[i].name + '|'; }
+    }
+    if (box.__key === key) { return; }
+    box.__key = key;
+    while (box.firstChild) { box.removeChild(box.firstChild); }
+    function add(id, label, cls) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = cls + ' wide';
+      b.textContent = label;
+      b.onclick = function () { act({ action: 'steal', teamId: id }); };
+      box.appendChild(b);
+    }
+    for (i = 0; i < st.teams.length; i++) {
+      if (st.teams[i].id !== st.currentTeamId) { add(st.teams[i].id, st.teams[i].name, 'choice'); }
+    }
+    add('none', 'No one', 'quiet');
+  }
+
+  /* Rebuilt only when something in it changed. Names go in through textContent. */
+  function renderStrip() {
+    var key = JSON.stringify(st.teams) + st.currentTeamId;
+    var box = $('strip');
+    if (box.__key === key) { return; }
+    box.__key = key;
+    while (box.firstChild) { box.removeChild(box.firstChild); }
+    for (var i = 0; i < st.teams.length; i++) {
+      var d = document.createElement('div');
+      d.className = st.teams[i].id === st.currentTeamId ? 'tile cur' : 'tile';
+      var n = document.createElement('span');
+      n.className = 'n';
+      n.textContent = st.teams[i].name;
+      var b = document.createElement('b');
+      b.textContent = String(st.teams[i].score);
+      d.appendChild(n);
+      d.appendChild(b);
+      box.appendChild(d);
+    }
+  }
+
+  function renderNormal() {
+    var phase = st.phase;
+    var from = phase === 'paused' ? st.pausedFrom : phase;
+    var artist = st.drawerName || 'Artist';
+    var who = '', pill = 'Round ' + st.round;
+    if (phase === 'ready') { who = st.currentTeamName + ': who draws?'; }
+    else if (from === 'claimed') { who = artist + ' is reading'; }
+    else if (from === 'drawing') { who = artist + ' is drawing'; }
+    else if (from === 'steal') { who = 'Other teams: guess!'; }
+    else if (phase === 'summary') { who = 'The word was'; }
+    if (phase === 'paused') { pill = 'Paused'; }
+    setText('gPill', pill);
+    $('gPill').className = phase === 'paused' ? 'pill live' : 'pill';
+    setText('gWho', who);
+    var timed = from === 'claimed' || from === 'drawing' || from === 'steal';
+    setText('gClock', String(st.secondsLeft));
+    $('gClock').className = !timed ? 'bigClock hidden' : (st.secondsLeft <= 10 ? 'bigClock low' : 'bigClock');
+    show('claimBox', phase === 'ready');
+    show('gotBtn', phase === 'drawing');
+    show('stealBox', phase === 'steal');
+    if (phase === 'steal') { renderSteal(); }
+    show('sumBox', phase === 'summary');
+    show('nextBtn', phase === 'summary');
+    if (phase === 'summary') {
+      setText('gPrompt', st.prompt || '');
+      var result;
+      if (st.outcome === 'guessed') { result = st.scoredTeamName + ' +' + st.points; }
+      else if (st.outcome === 'stolen') { result = st.scoredTeamName + ' stole it +' + st.points; }
+      else { result = 'No one got it'; }
+      setText('gResult', result);
+      setText('nextBtn', 'Next: ' + st.nextTeamName);
+    }
+    setText('pauseBtn', phase === 'paused' ? 'Resume' : 'Pause');
+    $('pauseBtn').className = (phase === 'paused' ? 'primary' : '') + (timed ? '' : ' hidden');
+    show('takeBtn', from === 'claimed' || from === 'drawing');
+    renderStrip();
+    renderTeams();
+  }
+
+  function render() {
+    var drawerOn = !!token;
+    var was = !$('drawer').__hidden;
+    $('drawer').__hidden = !drawerOn;
+    show('drawer', drawerOn);
+    show('normal', !drawerOn);
+    if (drawerOn) {
+      if (!was) { showSettings(false); }
+      renderDrawer();
+      if (!was) { window.scrollTo(0, 0); }
+      layoutCanvas();
+    } else {
+      document.documentElement.className = '';
+      renderNormal();
+    }
+  }
+
+  function applyState(s) {
+    st = s;
+    if (token && (s.phase === 'ready' || s.phase === 'summary')) { dropRole(null); }
+    if (token) {
+      restoreDrawing();
+      if (s.promptId !== promptForId) { fetchPrompt(); }
+    }
+    render();
+  }
+
+  // ----- Polling -----
+  var stateBusy = false, lastPoll = 0;
+  function pollState() {
+    if (stateBusy) { return; }
+    stateBusy = true;
+    lastPoll = new Date().getTime();
+    request('GET', 'state', null, function (status, s) {
+      stateBusy = false;
+      if (status === 200 && s) { applyState(s); }
+    });
+  }
+
+  function act(body, after) {
+    request('POST', 'action', body, function (status, r) {
+      if (status === 200 && r) {
+        if (after) { after(r); }
+        applyState(r);
+      } else {
+        if (status === 400 && r && r.error) { message(r.error); }
+        else if (status !== 400) { message('Could not reach the TV. Try again.'); }
+        pollState();
+      }
+    });
+  }
+
+  // ----- Buttons -----
+  $('claimBtn').onclick = function () {
+    act({ action: 'claim', name: $('nameInput').value }, function (r) {
+      strokes = [];
+      ops = [];
+      promptForId = null;
+      promptCovered = false;
+      restored = true;
+      redraw();
+      saveToken(r.drawerToken);
+    });
+  };
+  $('rStart').onclick = function () {
+    if (token) { act({ action: 'start_drawing', token: token }); }
+  };
+  $('gotBtn').onclick = function () { if (st) { act({ action: 'got_it', promptId: st.promptId }); } };
+  $('nextBtn').onclick = function () { act({ action: 'next_turn' }); };
+  $('pauseBtn').onclick = function () { act({ action: st && st.phase === 'paused' ? 'resume' : 'pause' }); };
+  $('takeBtn').onclick = function () {
+    confirmBox('Take over? Only if the drawer\'s phone died. You get a new word and a clean canvas.', 'Take over', 'Cancel', function () {
+      act({ action: 'take_over', name: $('nameInput').value }, function (r) {
+        strokes = [];
+        ops = [];
+        promptForId = null;
+        promptCovered = false;
+        restored = true;
+        redraw();
+        saveToken(r.drawerToken);
+      });
+    });
+  };
+  $('addTeamBtn').onclick = function () { act({ action: 'add_team' }); };
+  $('promptBtn').onclick = function () {
+    var text = $('promptInput').value;
+    if (!text.replace(/\s/g, '')) { return; }
+    act({ action: 'add_prompt', text: text }, function () {
+      $('promptInput').value = '';
+      setText('promptNote', 'Added. Joins from round 2.');
+    });
+  };
+  $('resetBtn').onclick = function () {
+    confirmBox('Reset the game? Scores go to 0 and all words come back. Teams and added words stay.', 'Reset game', 'Cancel', function () { act({ action: 'reset_game' }); });
+  };
+  var goingHome = false;
+  function askHome() {
+    confirmBox('Go back to the home screen? This moves the TV and every phone.', 'Go home', 'Stay', function () {
+      if (goingHome) { return; }
+      goingHome = true;
+      HubClient.home(function (ok) { goingHome = false; if (!ok) { message('Could not reach the TV. Try again.'); } });
+    });
+  }
+  (function () {
+    var homes = document.querySelectorAll('.goHome');
+    for (var i = 0; i < homes.length; i++) { homes[i].onclick = askHome; }
+  })();
+
+  /* ---------- settings ---------- */
+
+  function showSettings(on) {
+    var box = document.getElementById('settings');
+    box.style.display = on ? '' : 'none';
+    document.documentElement.style.overflow = on ? 'hidden' : '';
+    if (on) { box.scrollTop = 0; }
+  }
+  (function () {
+    var open = document.querySelectorAll('.openSettings');
+    for (var i = 0; i < open.length; i++) { open[i].onclick = function () { showSettings(true); }; }
+    document.getElementById('setClose').onclick = function () { showSettings(false); };
+  })();
+
+  $('dPrompt').onclick = function () { promptCovered = !promptCovered; if (st) { renderDrawer(); } };
+  $('undoBtn').onclick = undo;
+  $('clearBtn').onclick = function () {
+    if (!canUseTools()) { return; }
+    wipeLocal();
+    ops.push({ action: 'clear' });
+  };
+  $('skipBtn').onclick = function () {
+    if (!canUseTools() || st.skipLeft < 1) { return; }
+    confirmBox('Skip this word? The canvas clears and the clock keeps running.', 'Skip', 'Keep drawing', function () {
+      wipeLocal();
+      prompt = null;
+      promptForId = null;
+      ops.push({ action: 'skip' });
+      $('skipBtn').disabled = true;
+    });
+  };
+
+  function buildTools() {
+    var row = $('colourRow');
+    var i;
+    function pickColour(name, b) {
+      b.onclick = function () {
+        colour = name;
+        for (var k = 0; k < row.childNodes.length; k++) { row.childNodes[k].className = 'swatch'; }
+        b.className = 'swatch on';
+      };
+    }
+    for (i = 0; i < ORDER.length; i++) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = ORDER[i] === colour ? 'swatch on' : 'swatch';
+      b.style.background = COLOURS[ORDER[i]];
+      b.setAttribute('aria-label', ORDER[i]);
+      pickColour(ORDER[i], b);
+      row.appendChild(b);
+    }
+    var sizes = $('sizeRow');
+    var px = { 1: 6, 2: 12, 3: 22 };
+    function pickSize(n, z) {
+      z.onclick = function () {
+        size = n;
+        for (var k = 0; k < sizes.childNodes.length; k++) { sizes.childNodes[k].className = 'sz'; }
+        z.className = 'sz on';
+      };
+    }
+    for (i = 1; i <= 3; i++) {
+      var z = document.createElement('button');
+      z.type = 'button';
+      z.className = i === size ? 'sz on' : 'sz';
+      z.setAttribute('aria-label', ['thin', 'medium', 'thick'][i - 1]);
+      var d = document.createElement('span');
+      d.className = 'dot';
+      d.style.width = px[i] + 'px';
+      d.style.height = px[i] + 'px';
+      z.appendChild(d);
+      pickSize(i, z);
+      sizes.appendChild(z);
+    }
+  }
+
+  // ----- Start -----
+  buildTools();
+  redraw();
+  $('drawer').__hidden = true;
+  try { HubClient.start({ kind: 'phone', app: APP }); } catch (e) { if (window.console) { console.log(e); } }
+  setInterval(function () { try { flush(); } catch (e) { inFlight = false; } }, FLUSH_MS);
+  setInterval(function () {
+    try {
+      var gap = token ? 500 : 800;
+      if (new Date().getTime() - lastPoll >= gap) { pollState(); }
+    } catch (e) { stateBusy = false; }
+  }, 200);
+  pollState();
+})();
+</script>
+</body>
+</html>
